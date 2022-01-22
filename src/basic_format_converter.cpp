@@ -9,14 +9,14 @@ int main(int argc, char** argv){
   }
 
   Trajectory  traj;
-  rw::FrameChooser fr{1, 1, 1};
-  int out = rw::loadFile(argv[1], traj, fr);
+  rw::FrameChooser fc{1, -1, 1};
+  int out = rw::loadFile(argv[1], traj);
   if(out != 0){
     printf("Input file could not be read properly\n");
     return 0;
   }
 
-  out = rw::writeFile(argv[2], traj, fr);
+  out = rw::writeFile(argv[2], traj, fc);
   if(out != 0){
     printf("Output file was not written properly\n");
     return 0;

@@ -3,7 +3,6 @@
 #include <iomanip>
 
 
-
 using std::string;
 using std::vector;
 using std::array;
@@ -13,17 +12,32 @@ using rw::loadPOSCAR;
 using rw::split;
 using rw::trimCString;
 
+
 void parseXYZCommentLine(char* comment, Frame &fr){
   int step = 0;
   float time = 0.0f, energy = 0.0f;
-  char s1[10], s2[10], s3[10], s4[10], s5[10], s6[10];
-  int n = sscanf(comment, "%s %s %i, %s %s %f, %s %s %f", s1, s2, &step, s3, s4, &time, s5, s6, &energy);
-  if(n == 9 && strncmp(s1, "i", 1) == 0){
-    //printf("output of parsing comment %i ,  %s: %i  time: %f  energy: %f\n", n, s1, step, time, energy);
-    fr.step = step;
-    fr.time = time;
-    fr.energy = energy;
+  char s1[10], s2[10], s3[10], s4[10], s5[10], s6[10]; //variables for cp2k format
+  if(strncmp(comment, "Lattice=", 8) == 0){ //read ase extended format
+    char lattice_string[1024];
+    glm::mat3 cell;
+    int n = sscanf(comment,  "%*[^\"]\"%[^\"]\"", lattice_string);
+    if (n == 0) return;
+    n = sscanf(lattice_string, "%f %f %f %f %f %f %f %f %f", &cell[0][0], &cell[0][1], &cell[0][2], 
+                                                              &cell[1][0], &cell[1][1],&cell[1][2],
+                                                              &cell[2][0], &cell[2][1],&cell[2][2]);
+    if (n != 9) return;
+    fr.setUnitCell(cell);
   }
+  else{
+    int n = sscanf(comment, "%s %s %i, %s %s %f, %s %s %f", s1, s2, &step, s3, s4, &time, s5, s6, &energy);
+    if(n == 9 && strncmp(s1, "i", 1) == 0){
+      //printf("output of parsing comment %i ,  %s: %i  time: %f  energy: %f\n", n, s1, step, time, energy);
+      fr.step = step;
+      fr.time = time;
+      fr.energy = energy;
+    }
+  }
+
   return;
 }
 
@@ -192,16 +206,21 @@ unsigned int cifOperationMatFromStr(std::array<std::array<float, 4>, 3> &rmat,
 
 
 std::string parseCifElementSymbol(const std::string &symbol){
-    //fails if first character is a whitespace
-    std::string finalStr;
-    size_t len = symbol.length();
-    for(size_t i=0; i<len; i++){
-      if(isalpha(symbol[i])){
-	  finalStr.push_back(symbol[i]); 
-	}
-      else{return finalStr;}
+  //fails if first character is a whitespace
+  std::string finalStr;
+  size_t len = symbol.length();
+  for(size_t i=0; i<len; i++){
+    if(isalpha(symbol[i])){
+      finalStr.push_back(symbol[i]); 
     }
-    return finalStr;
+    else{
+      break;
+    }
+  }
+  if(finalStr.size() == 0){
+    return "x";
+  }
+  return finalStr;
 }
 
 void rw::trimCString(char * s) {
@@ -245,31 +264,51 @@ std::vector<std::string> splitCifString(const std::string &str){
 	        i++; 
             }
 	    if(!temp.empty()) vs.push_back(temp);
-	    temp.clear();
-        }else{
+	      temp.clear();
+      }else{
     	//std::string ts (1, c);
             //temp.append(ts);
-    	temp.push_back(c);
-        }
+    	  temp.push_back(c);
+      }
     }
     vs.push_back(temp);
     return vs;    
 }
 // --------------------- functions to read and write files ---------------
 
+Trajectory rw::loadFile(const char* fileName){
+  rw::FrameChooser fc;
+  Trajectory traj;
+  loadFile(fileName, traj, fc);
+  return traj;
+}
+
+Trajectory rw::loadFile(const char* fileName, FrameChooser &fc){
+  Trajectory traj;
+  loadFile(fileName, traj, fc);
+  return traj;
+}
+
 unsigned int rw::loadFile(const char *fileName, Trajectory &traj){
-    rw::FrameChooser fc;
-    unsigned int out;
-    out = loadFile(fileName, traj, fc);
-    return out;
+  rw::FrameChooser fc;
+  unsigned int out;
+  out = loadFile(fileName, traj, fc);
+  return out;
 }
 
 unsigned int rw::loadFile(const char *fileName, Trajectory &traj, FrameChooser &fc){
+  unsigned int out;
+  rw::Scene sc;
+  out = loadFile(fileName, traj, fc, sc);
+  return out;
+}
+
+unsigned int rw::loadFile(const char *fileName, Trajectory &traj, FrameChooser &fc, rw::Scene &sc){
     string sfileName = fileName;
     unsigned int out = 3;
 
     if(sfileName.substr(sfileName.find_last_of(".") + 1) == "xyz"){
-       out = rw::loadXYZ(fileName, traj, fc);
+      out = rw::loadXYZ(fileName, traj, fc);
 	    //may check something
     } 
     if(sfileName.substr(sfileName.find_last_of(".") + 1) == "xtl"){
@@ -277,18 +316,24 @@ unsigned int rw::loadFile(const char *fileName, Trajectory &traj, FrameChooser &
 	    //may check something
     }     
     else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "cif"){
-        out = rw::loadCIF(fileName, traj);
+      out = rw::loadCIF(fileName, traj);
 	    //may check something
     }
     else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "gin"){
-        out = rw::loadGULP_Input(fileName, traj);
+      out = rw::loadGULP_Input(fileName, traj);
 	    //may check something
     }
-//    else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "pdb"){
-//        out = loadPDB(fileName, traj);
-// 	//may check something
-// 	return out;  
-//    } 
+    else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "inp"){
+      out = rw::loadCP2K_Input(fileName, traj);
+    }
+    else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "pdb"){
+      out = rw::loadPDB(fileName, traj);
+	  //may check something 
+   } 
+    else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "tigre"){
+      out = loadTigre(fileName, traj, fc, sc);
+	    //may check something
+    }
     else if (sfileName.find("OUTCAR") != string::npos){
        out = rw::loadOUTCAR(fileName, traj);
     }
@@ -313,13 +358,36 @@ unsigned int rw::loadFile(const char *fileName, Trajectory &traj, FrameChooser &
     setTrajName(traj, fileName);
     return out;
 }
-//
+
+unsigned int rw::writeFile(const char *fileName, Trajectory &traj){
+  FrameChooser fc;
+  //set the current frame to be saved
+  fc.first = traj.currentFrameIndex();
+  fc.last = traj.currentFrameIndex();
+  unsigned int out = rw::writeFile(fileName, traj, fc, "w");
+  return out;
+}
+
+unsigned int rw::writeFile(const char *fileName, Trajectory &traj, const char* mode){
+  FrameChooser fc;
+  //set the current frame to be saved
+  fc.first = traj.currentFrameIndex();
+  fc.last = traj.currentFrameIndex();
+  unsigned int out = rw::writeFile(fileName, traj, fc, mode);
+  return out;
+}
+
 unsigned int rw::writeFile(const char *fileName, Trajectory &traj, const FrameChooser &fc){
+  unsigned int out = rw::writeFile(fileName, traj, fc, "w");
+  return out;
+}
+
+unsigned int rw::writeFile(const char *fileName, Trajectory &traj, const FrameChooser &fc, const char* mode){
   string sfileName = fileName;
   unsigned int out;
 
   if(sfileName.substr(sfileName.find_last_of(".") + 1) == "xyz"){
-    out = rw::writeXYZ(fileName, traj, fc);
+    out = rw::writeXYZ(fileName, traj, fc, mode);
     //may check something
     return out;  
   }
@@ -335,22 +403,59 @@ unsigned int rw::writeFile(const char *fileName, Trajectory &traj, const FrameCh
   }
   else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "cif"){
     out = rw::writeCIF(fileName, traj);
-	return out;
+	  return out;
   }
-//    else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "pdb"){
-//        out = writePDB(fileName, traj);
-// 	return out;
-//    }
-   else if(sfileName.find("POSCAR") != string::npos || sfileName.find("CONTCAR") != string::npos){
+  else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "pdb"){
+    out = writePDB(fileName, traj, fc);
+	  return out;
+  }
+  // else if(sfileName.substr(sfileName.find_last_of(".") + 1) == "tigre"){
+  //   out = rw::writeTigre(fileName, traj, fc);
+	//   return out;
+  // }
+  else if(sfileName.find("POSCAR") != string::npos || sfileName.find("CONTCAR") != string::npos){
      out = rw::writePOSCAR(fileName, traj);
 	 return out;
-   } 
-   else if(sfileName.find("CONFIG") != string::npos ){
+  } 
+  else if(sfileName.find("XDATCAR") != string::npos){
+    out = rw::writeXDATCAR(fileName, traj, fc, mode);
+	  return out;
+  } 
+  else if(sfileName.find("CONFIG") != string::npos ){
       out = rw::writeDLPOLY_CONFIG(fileName, traj);
 	  return out;
     }
 
    return 0;
+}
+
+unsigned int rw::loadCAR(const char *fileName, Trajectory &traj, FrameChooser &fc){
+  FILE *file;
+  file = fopen(fileName, "r");
+
+  if( file == NULL ){
+    printf("Impossible to open the file named  %s !\n", fileName);
+    return 1;
+  }
+
+  Frame fr;
+  char buffer[1024], atomType[10];
+  // float x, y, z, time, charge, 
+  float a, b, c, alpha, beta, gamma;
+  // int numAtoms, frameCount = 1, cycleToRead = 0;
+  // int step;
+  std::string symbol;
+
+  while (fgets(buffer, 1024, file) != NULL){
+    if(strstr(buffer, "PBC") != NULL){ //read cell
+      sscanf(buffer, "%*s %f %f %f %f %f %f", &a, &b, &c, &alpha, &beta, &gamma);
+      Cell cell = Cell(a, b, c, alpha, beta, gamma);
+      fr.setUnitCell(cell);
+      continue;
+    } 
+  }
+
+  return 0;
 }
 
 unsigned int rw::loadDLPOLY_HISTORY(const char *fileName, Trajectory &traj, rw::FrameChooser &fc){
@@ -369,19 +474,27 @@ unsigned int rw::loadDLPOLY_HISTORY(const char *fileName, Trajectory &traj, rw::
   Frame fr;
   char buffer[1024], atomType[10];
   float x, y, z, time, charge;
-  int numAtoms, numFrames, frameCount = 1, cycleToRead = 0;
+  int numAtoms, frameCount = 1, cycleToRead = 0;
   int step;
   glm::mat3 cell;
   std::string symbol;
 
   //reading comment
-  if(fgets(buffer, 1024, file) == NULL) return 1; 
+  //if(fgets(buffer, 1024, file) == NULL) return 1; 
   //reading header
-  if(fgets(buffer, 1024, file) == NULL) return 1;
-  sscanf(buffer, "%*s %*s %i %i", &numAtoms, &numFrames);
+  //if(fgets(buffer, 1024, file) == NULL) return 1;
+  //sscanf(buffer, "%*s %*s %i %i", &numAtoms, &numFrames);
 
   while (fgets(buffer, 1024, file) != NULL){
+    if(strncmp(buffer, "timestep", 8) != 0){
+      continue; //not the line with timestep info
+    }
     sscanf(buffer, "%*s %i %i %*s %*s %*s %f", &step, &numAtoms, &time);   //store the number of atoms to read
+    // printf("number read %i\n", n);
+    // if(n <= 1){
+    //   continue; //no the line with timestep info
+    // }
+
     if(fc.last != -1 && frameCount > fc.last){ break;  }
 
     if(frameCount == fc.first + cycleToRead * fc.stride ){ // frame to read
@@ -419,18 +532,18 @@ unsigned int rw::loadDLPOLY_HISTORY(const char *fileName, Trajectory &traj, rw::
       frameCount += 1;
     }
     else{ // pass this frame
-        if(fgets(buffer, 1024, file) == NULL) break;  //first cell line
-        if(fgets(buffer, 1024, file) == NULL) break;  //second cell line
-        if(fgets(buffer, 1024, file) == NULL) break;  //third cell line
-        //start to read atoms
-        for(int i = 0; i < numAtoms; i++){
-            if(fgets(buffer, 1024, file) == NULL) break; 
-            if(fgets(buffer, 1024, file) == NULL) break; 
-        }
-        frameCount += 1;
+      if(fgets(buffer, 1024, file) == NULL) break;  //first cell line
+      if(fgets(buffer, 1024, file) == NULL) break;  //second cell line
+      if(fgets(buffer, 1024, file) == NULL) break;  //third cell line
+      //start to read atoms
+      for(int i = 0; i < numAtoms; i++){
+        if(fgets(buffer, 1024, file) == NULL) break; 
+        if(fgets(buffer, 1024, file) == NULL) break; 
+      }
+      frameCount += 1;
     }
   } // end while
-  printf("num frames: %i   %i\n", traj.numFrames(), traj.numAtoms());
+  //printf("num frames: %i   %i\n", traj.numFrames(), traj.numAtoms());
   traj.setUnitCellLines();
   fclose(file);
   return 0;
@@ -450,36 +563,37 @@ unsigned int rw::loadGULP_Input(const char* fileName, Trajectory &traj){
   props::LatticeParams lp;
   std::string symbol;
   bool readingCoors = false;
+
   
   while (fgets(buffer, 1024, file) != NULL){
     //check if it's the cell line
     if(strncmp(buffer, "cell", 4) == 0) {
-      fgets(buffer, 1024, file);
+      if(fgets(buffer, 1024, file) == NULL) break;
       sscanf(buffer, "%f %f %f %f %f %f", &lp.a, &lp.b, &lp.c, &lp.alpha, &lp.beta, &lp.gamma);
       fr.setUnitCell(lp);
       continue;
     }
     //check if it's the coordinates line
     if(strncmp(buffer, "cartesian", 9) == 0) {
-      traj.setCartesian(true);
+      fr.cartesian = true;
       readingCoors = true;
       continue;
     }    
     if(strncmp(buffer, "fractional", 10) == 0) {
-      traj.setCartesian(true);
+      fr.cartesian = false;
       readingCoors = true;
       continue;
     }
     if(readingCoors){
       //reading atom i
       int n = sscanf(buffer, "%s %*s %f %f %f %f", atomType, &x, &y, &z, &charge);
-      if(n != 5){
+      if(n < 4){
         continue; // The info to create a new atom is not complete or not atom line
       }
       symbol = parseCifElementSymbol(atomType);
       Atom &at = fr.addAtom(symbol.c_str(), x, y, z);
       strcpy(at.atomType, atomType);
-      at.charge = charge;
+      if(n == 5) at.charge = charge;
     }
   } // end while
   traj.addFrame(fr);
@@ -570,72 +684,100 @@ unsigned int rw::loadOUTCAR(const char *fileName, Trajectory &traj){
    float x, y, z;
    glm::mat3 cell;
 
-   while(fgets(buffer, 1024, file) != NULL){
-        if(strstr(buffer, "POTCAR:") != NULL){
-            sscanf(buffer, "%*s  %*s  %s", symbol);
-            vaspSymbols.emplace_back(symbol);
+  while(fgets(buffer, 1024, file) != NULL){
+    if(strstr(buffer, "POTCAR:") != NULL){
+      sscanf(buffer, "%*s  %*s  %s", symbol);
+      vaspSymbols.emplace_back(symbol);
+    }
+    else if(strstr(buffer, "IBRION") != NULL){
+      sscanf(buffer, "%*s  %*s  %i", &ibrion);
+    }
+    else if(strstr(buffer, "ions per type =") != NULL){
+      stringLine = buffer;
+      lsplitted = split(stringLine);
+      for(unsigned int i=4; i<lsplitted.size(); ++i){
+        nAtoms += stoi(lsplitted[i]);
+        ionsPerType.emplace_back(nAtoms);
+      }
+    }
+    else if(strstr(buffer, "direct lattice vectors") != NULL){
+      if(fgets(buffer, 1024, file) == NULL) break;
+      sscanf(buffer, "%f %f %f", &cell[0][0], &cell[0][1], &cell[0][2]);
+      if(fgets(buffer, 1024, file) == NULL) break;
+      sscanf(buffer, "%f %f %f", &cell[1][0], &cell[1][1], &cell[1][2]);
+      if(fgets(buffer, 1024, file) == NULL) break;
+      sscanf(buffer, "%f %f %f", &cell[2][0], &cell[2][1], &cell[2][2]);
+      fr.setUnitCell(cell);
+    }
+    else if(strstr(buffer, "POSITION") != NULL){
+      if(fgets(buffer, 1024, file) == NULL) break; // pass the ------ line
+      unsigned int indexIonPerType = 0;
+      for(unsigned int i = 0; i < nAtoms; ++i){
+          if(fgets(buffer, 1024, file) == NULL) break; // pass the ------ line
+          sscanf(buffer, "%f %f %f", &x, &y, &z);
+          // update the position of the label
+          if(i >= ionsPerType[indexIonPerType]){
+              indexIonPerType ++;
+          }
+          // update the position of the label
+          Atom& at = fr.addAtom(vaspSymbols[indexIonPerType].c_str(), x, y, z);
+          strcpy(at.atomType, vaspSymbols[indexIonPerType].c_str());
+      }
+
+      //skip a bunch of lines to get to the energy
+      for(unsigned int i = 0; i < 12; ++i){
+        if(fgets(buffer, 1024, file) == NULL) break; // pass the ------ line
+      }
+      //skip a bunch of lines to get to the energy
+
+      if(fgets(buffer, 1024, file) == NULL) break; //get the energy line
+      sscanf(buffer, "%*s %*s %*s %*s %*s %*s %f", &fr.energy);
+
+      //end the reading of atoms
+      // traj.addFrame(fr);
+      traj.addFrame(fr);
+      fr = Frame();
+    }//end the reading of atoms
+    else if(strstr(buffer, "THz") != NULL && strstr(buffer, "cm-1") != NULL){ //read vibs
+      // get the frequency of vibration
+      float vib = 0;
+      if(strstr(buffer, "f  =") != NULL)
+        sscanf(buffer, "%*s %*s %*s %*s %*s %*s %*s %f %*s %*s %*s", &vib);
+      else{
+        sscanf(buffer, "%*s %*s %*s %*s %*s %*s %f %*s %*s %*s", &vib);
+        vib *= -1;
+      }
+
+      if(fgets(buffer, 1024, file) == NULL) break; //skip one line
+      // check whether traj has at least one struct
+	    if(traj.numFrames() == 0) continue;
+      Freq freq;
+      freq.vib = vib;
+      freq.disp.reserve(nAtoms);
+       //get the displacements
+	    for(unsigned int i = 0; i < nAtoms; ++i){
+        if(fgets(buffer, 1024, file) == NULL) break; // pass the ------ line
+        glm::vec3 coor;
+        sscanf(buffer, "%*s %*s %*s %f %f %f", &coor[0], &coor[1], &coor[2]);
+        freq.disp.push_back(coor);
 	    }
-        else if(strstr(buffer, "IBRION") != NULL){
-            sscanf(buffer, "%*s  %*s  %i", &ibrion);
-        }
-        else if(strstr(buffer, "ions per type =") != NULL){
-            stringLine = buffer;
-            lsplitted = split(stringLine);
-            for(unsigned int i=4; i<lsplitted.size(); ++i){
-              nAtoms += stoi(lsplitted[i]);
-              ionsPerType.emplace_back(nAtoms);
-            }
-        }
-        else if(strstr(buffer, "direct lattice vectors") != NULL){
-          if(fgets(buffer, 1024, file) == NULL) break;
-          sscanf(buffer, "%f %f %f", &cell[0][0], &cell[0][1], &cell[0][2]);
-          if(fgets(buffer, 1024, file) == NULL) break;
-          sscanf(buffer, "%f %f %f", &cell[1][0], &cell[1][1], &cell[1][2]);
-          if(fgets(buffer, 1024, file) == NULL) break;
-          sscanf(buffer, "%f %f %f", &cell[2][0], &cell[2][1], &cell[2][2]);
-          fr.setUnitCell(cell);
-        }
-        else if(strstr(buffer, "POSITION") != NULL){
-            if(fgets(buffer, 1024, file) == NULL) break; // pass the ------ line
-            unsigned int indexIonPerType = 0;
-            for(unsigned int i = 0; i < nAtoms; ++i){
-               fgets(buffer, 1024, file);
-               sscanf(buffer, "%f %f %f", &x, &y, &z);
-               // update the position of the label
-               if(i >= ionsPerType[indexIonPerType]){
-                   indexIonPerType ++;
-               }
-               // update the position of the label
-               Atom& at = fr.addAtom(vaspSymbols[indexIonPerType].c_str(), x, y, z);
-               strcpy(at.atomType, vaspSymbols[indexIonPerType].c_str());
-            }
-
-            //skip a bunch of lines to get to the energy
-            for(unsigned int i = 0; i < 12; ++i) fgets(buffer, 1024, file);
-
-            if(fgets(buffer, 1024, file) == NULL) break; //get the energy line
-            sscanf(buffer, "%*s %*s %*s %*s %*s %*s %f", &fr.energy);
-
-            //end the reading of atoms
-            // traj.addFrame(fr);
-            traj.addFrame(fr);
-            fr = Frame();
-        }//end the reading of atoms
-	 else if(strstr(buffer, "  (absolute, valence and core)") != NULL){
+      //add the new mode to traj
+      traj.freqs.push_back(freq);
+    }
+	  else if(strstr(buffer, "  (absolute, valence and core)") != NULL){
 	     // check whether traj has at least one struct
 	     if(traj.numFrames() == 0) continue;
 	     float nmr;
 	     for(unsigned int i = 0; i < nAtoms; ++i){
-            fgets(buffer, 1024, file);
-            sscanf(buffer, "%*s %*s %*s %*s %f", &nmr);
-            traj.atom(i).chemShift = nmr;
+          if(fgets(buffer, 1024, file) == NULL) break; // pass the ------ line
+          sscanf(buffer, "%*s %*s %*s %*s %f", &nmr);
+          traj.atom(i).chemShift = nmr;
 	     }
-	 }
-
-   }
-   fclose(file);
-   traj.setUnitCellLines();
-   return 0;
+	  }
+  }
+  fclose(file);
+  traj.setUnitCellLines();
+  return 0;
 }
 
 unsigned int rw::loadXYZ(const char *fileName, Trajectory &traj){
@@ -652,10 +794,10 @@ unsigned int rw::loadXYZ(const char *fileName, Trajectory &traj){
     return 1;
   }
 
-  fgets(buffer, 1024, file);  //read first line to take number of atoms
+  if(fgets(buffer, 1024, file) == NULL) return 1;  //read first line to take number of atoms
   sscanf(buffer, "%i", &n);
           
-  fgets(buffer, 1024, file);  //comment line
+  if(fgets(buffer, 1024, file) == NULL) return 1; //  comment line
   fr.comment = buffer;
   	
   while (fgets(buffer, 1024, file) != NULL){
@@ -674,9 +816,9 @@ unsigned int rw::loadXYZ(const char *fileName, Trajectory &traj){
       traj.addFrame(fr);
       fr = Frame();
                       
-      fgets(buffer, 1024, file);  //comment number of atoms
+      if(fgets(buffer, 1024, file) == NULL) break;   //comment number of atoms
       sscanf(buffer, "%i", &n);
-      fgets(buffer, 1024, file);  //comment line
+      if(fgets(buffer, 1024, file) == NULL) break;   //comment line
       fr.comment = buffer;
     }
   } // end while
@@ -701,42 +843,72 @@ unsigned int rw::loadXYZ(const char *fileName, Trajectory &traj, rw::FrameChoose
   
   while (fgets(buffer, 1024, file) != NULL){
     sscanf(buffer, "%i", &numAtoms);   //store the number of atoms to read
+    fr.reserve(numAtoms);
 
     if(frameCount == fc.first + cycleToRead * fc.stride){ // frame to read
-        if(fgets(buffer, 1024, file) != NULL){
-            //comment line
-            fr.comment = buffer;
-            parseXYZCommentLine(buffer, fr);
-        }  
+      if(fgets(buffer, 1024, file) != NULL){
+        //comment line
+        fr.comment = buffer;
+        parseXYZCommentLine(buffer, fr);
+      }  
 
-        //start to read atoms
-        for(unsigned int i = 0; i < numAtoms; i++){
-            if(fgets(buffer, 1024, file) != NULL){
-                sscanf(buffer, "%s %f %f %f", symbol, &x, &y, &z);
-                Atom& at = fr.addAtom(symbol, x, y, z);
-                strcpy(at.atomType, symbol);
-            }
+      //start to read atoms
+      // load first one to check if atoms are char or integer
+      fgets(buffer, 1024, file);
+      sscanf(buffer, "%s %f %f %f", symbol, &x, &y, &z);
+      int atom_num_from_str = atoi(symbol);
+      if (atom_num_from_str == 0){ //not an integer
+        fr.addAtom(symbol, x, y, z); //add the just read
+        // add the rest of atoms
+        for(unsigned int i = 1; i < numAtoms; i++){
+          if(fgets(buffer, 1024, file) != NULL){
+            sscanf(buffer, "%s %f %f %f", symbol, &x, &y, &z);
+            // Atom& at = fr.addAtom(symbol, x, y, z);
+            fr.addAtom(symbol, x, y, z);
+            // strcpy(at.atomType, symbol);
+          }
         }
-        
-        traj.addFrame(fr);
-        fr = Frame();
-        cycleToRead += 1;
-        frameCount += 1;
+      }else{ // it is the atomic number what must be read
+        fr.addAtom(atom_num_from_str, x, y, z); //add the just read
+        // add the rest of atoms
+        for(unsigned int i = 1; i < numAtoms; i++){
+          if(fgets(buffer, 1024, file) != NULL){
+            sscanf(buffer, "%i %f %f %f", &atom_num_from_str, &x, &y, &z);
+            fr.addAtom(atom_num_from_str, x, y, z);
+            // strcpy(at.atomType, symbol);
+          }
+        }
+      } 
+      
+      // for(unsigned int i = 0; i < numAtoms; i++){
+      //   if(fgets(buffer, 1024, file) != NULL){
+      //     sscanf(buffer, "%s %f %f %f", symbol, &x, &y, &z);
+      //     Atom& at = fr.addAtom(symbol, x, y, z);
+      //     // strcpy(at.atomType, symbol);
+      //   }
+      // }
+      
+      traj.addFrame(fr);
+      fr = Frame();
+      cycleToRead += 1;
+      frameCount += 1;
     }
     else{
-        if(fgets(buffer, 1024, file) == NULL) break;  //comment line
-        // read atoms but pass, do not store this frames
-        for(unsigned int i = 0; i < numAtoms; i++){
-          if(fgets(buffer, 1024, file) == NULL) break; 
-        }
-        frameCount += 1;
+      if(fgets(buffer, 1024, file) == NULL) break;  //comment line
+      // read atoms but pass, do not store this frames
+      for(unsigned int i = 0; i < numAtoms; i++){
+        if(fgets(buffer, 1024, file) == NULL) break; 
+      }
+      frameCount += 1;
     }
     if(fc.last != -1 && frameCount > (unsigned int)fc.last){
       break;
     }
   } // end while
    
-   fclose(file);
+  fclose(file);
+  traj.setUnitCellLines();
+  //  printf("done with xyz loading \n");
    return 0;
 }
 
@@ -852,6 +1024,7 @@ unsigned int rw::loadXTL(const char *fileName, Trajectory &traj){
     }
 
    } //close the while
+    file.close();
    
    //prepare atomic symbols
   std::vector<std::string> symbols;
@@ -954,24 +1127,24 @@ unsigned int rw::loadXDATCAR(const char *fileName, Trajectory &traj){
   string format = "%s";
   vector<string> symbols, lsplitted;
   vector <unsigned int> numElements;
-  char buffer[1024], symbol[3];
+  char buffer[1024];
   float x, y, z, scaleVol;
   glm::mat3 cell;
   
   file = fopen(fileName, "r");
 
-  fgets(buffer, 1024, file);
+  if(fgets(buffer, 1024, file) == NULL) return 1; // pass the ------ line
   //read comment
   fr.comment = buffer;
   //read scale vol  -------
-  fgets(buffer, 1024, file);
+  if(fgets(buffer, 1024, file) == NULL) return 1; // pass the ------ line
   sscanf(buffer, "%f", &scaleVol);
   traj.volScale = scaleVol;
   //read scale vol  -------
    
   //read cell----------------------
   for(unsigned int i=0; i<3; ++i){
-    fgets(buffer, 1024, file);
+    if(fgets(buffer, 1024, file) == NULL) break; // pass the ------ line
 	  int nread = sscanf(buffer, "%f %f %f", &cell[i][0], &cell[i][1], &cell[i][2]);
     if(nread != 3){
       printf("problem reading cell in XDATCAR file\n");
@@ -983,12 +1156,12 @@ unsigned int rw::loadXDATCAR(const char *fileName, Trajectory &traj){
   
   //read cell----------------------
   //read atom symbols
-  fgets(buffer, 1024, file);
+  if(fgets(buffer, 1024, file) == NULL) return 1; // pass the ------ line
   string buffCopy = buffer;
   symbols = rw::split(buffCopy);
 
   //read num elements
-  fgets(buffer, 1024, file);
+  if(fgets(buffer, 1024, file) == NULL) return 1; // pass the ------ line
   buffCopy = buffer;
   lsplitted = rw::split(buffCopy);
   for(auto &s:lsplitted){
@@ -1017,7 +1190,7 @@ unsigned int rw::loadXDATCAR(const char *fileName, Trajectory &traj){
 	      if(lineRead == NULL) break;
 	    }
 
-      fr.cell = cell; 
+      fr.setUnitCell(cell); 
       fr.cartesian = false;
       traj.addFrame(fr);
 	    fr = Frame();
@@ -1167,7 +1340,7 @@ unsigned int rw::loadPOSCAR(const char *fileName, Trajectory &traj){
   return 0;
 }
 
-unsigned int loadPDB(const char *fileName, Trajectory &traj){
+unsigned int rw::loadPDB(const char *fileName, Trajectory &traj){
   //  FILE *file;
   char buffer[1024], symbol[3]; //spaceGroup[10];
   char vector[9], x[9], y[9], z[9]; //for unit cell and coordinates
@@ -1225,6 +1398,7 @@ unsigned int loadPDB(const char *fileName, Trajectory &traj){
     fz = atof(z);
     strncpy(symbol, buffer+76, 2);
     symbol[2] = '\0';
+    rw::trimCString(symbol);
 	  Atom &at = fr.addAtom(symbol, fx, fy, fz);
 
     //atom type 
@@ -1265,6 +1439,7 @@ unsigned int loadPDB(const char *fileName, Trajectory &traj){
 	    // it is used at the end of the while loop to check if structure has been added to traj
 	    counter ++; 
       traj.addFrame(fr);
+      printf("adding a new frame\n");
 	    fr = Frame();
 	    continue;
 	  }
@@ -1274,7 +1449,105 @@ unsigned int loadPDB(const char *fileName, Trajectory &traj){
    return 0;
 }
 
+unsigned int rw::loadCP2K_Input(const char *fileName, Trajectory &traj){
+  FILE* file;
+  file = fopen(fileName, "r");
+  if(!file){
+    printf("Impossible to open file %s \n", fileName);
+    return 1;
+  } 
 
+  char buffer[1024];
+  char stringCheck[1024];
+  bool readingSubsys = false;
+  bool readingCoor = false;
+  bool readingCell = false;
+  Frame fr;
+
+   while (fgets(buffer, 1024, file) != NULL)
+   {
+      sscanf(buffer, "%s", stringCheck);
+      if(strncmp(stringCheck, "&SUBSYS", 7) == 0){
+        readingSubsys = true;
+        continue;
+      }
+
+      if(readingSubsys && strncmp(stringCheck, "&COORD", 6) == 0){
+        readingCoor = true;
+        continue;
+      }
+      if(readingSubsys && strncmp(stringCheck, "&CELL", 5) == 0){
+        readingCell = true;
+        if(fgets(buffer, 1024, file) == NULL) break;
+        glm::mat3 cellm;
+        char keyword[10];
+        float a, b, c, alpha, beta, gamma;
+        sscanf(buffer, "%s %f %f %f", keyword, &a, &b, &c);
+        
+        if(strncmp(keyword, "ABC", 3) == 0){
+          //read lattice params, a, b and c are alrady set
+          if(fgets(buffer, 1024, file) == NULL) break;
+          sscanf(buffer, "%s %f %f %f", keyword, &alpha, &beta, &gamma);
+          if(strncmp(keyword, "ANGLES", 6) == 0 || strncmp(keyword, "ALPHA_BETA_GAMMA", 16) == 0){
+            Cell cell(a, b, c, alpha, beta, gamma);
+            fr.setUnitCell(cell);
+          }
+          else{
+            printf("Unit cell parameters could not be read properly\n");
+          }
+        }
+        else if(strncmp(keyword, "A", 1) == 0){
+          cellm[0][0] = a;cellm[0][1] = b;cellm[0][2] = c;
+          //read the second components
+          if(fgets(buffer, 1024, file) == NULL) break;
+          sscanf(buffer, "%s %f %f %f", keyword, &a, &b, &c);
+          if(strncmp(keyword, "B", 1) == 0){
+            sscanf(buffer, "%s %f %f %f", keyword, &a, &b, &c);
+            cellm[1][0] = a;cellm[1][1] = b;cellm[1][2] = c;
+          }
+
+          //read the third components
+          if(fgets(buffer, 1024, file) == NULL) break;
+          sscanf(buffer, "%s %f %f %f", keyword, &a, &b, &c);
+          if(strncmp(keyword, "C", 1) == 0){
+            sscanf(buffer, "%s %f %f %f", keyword, &a, &b, &c);
+            cellm[2][0] = a;cellm[2][1] = b;cellm[2][2] = c;
+          }
+
+          fr.setUnitCell(cellm);
+        }
+
+        continue;
+      } // end if cell
+
+      if(strncmp(stringCheck, "&END", 4) == 0){
+        if(readingCell){
+          readingCell = false;
+        }
+        else if(readingCoor){
+          readingCoor = false;
+        }
+        // else if(readingSubsys){
+        //   readingSubsys = false;
+        //   readingCoor = false;
+        // }
+        continue;
+      }
+
+      if(readingCoor){
+        char symbol[10];
+        float x, y, z;
+        sscanf(buffer, "%s %f %f %f", symbol, &x, &y, &z);
+        fr.addAtom(symbol, x, y, z);
+      }
+   } // end while
+
+  traj.addFrame(fr);
+  traj.setUnitCellLines();
+
+  fclose(file);
+  return 0;
+}
 
 unsigned int rw::loadCIF(const char *fileName, Trajectory &traj){
    Frame fr;
@@ -1548,6 +1821,85 @@ unsigned int rw::loadCIF(const char *fileName, Trajectory &traj){
 }
 
 
+unsigned int rw::loadTigre(const char *fileName, Trajectory &traj, const FrameChooser &fc, Scene &sc){
+  FILE* file;
+  char buffer[1024];
+  bool readingAtoms = false;
+  Frame fr;
+  std::vector<Style> newstyles;
+
+  file = fopen(fileName, "r");
+  if( file == NULL ){
+    printf("Impossible to open the file named  %s !\n", fileName);
+    return 1;
+  }
+  while(fgets(buffer, 1024, file) != NULL){
+    if(strncmp(buffer, "#camera position", 16) == 0){
+      sscanf(buffer, "%*s %*s %f %f %f", &sc.cameraLocation[0], &sc.cameraLocation[1], &sc.cameraLocation[2]);
+      continue;
+    }
+
+    if(strncmp(buffer, "#bg", 3) == 0){
+      sscanf(buffer, "%*s %f %f %f %f", &sc.background[0], &sc.background[1], &sc.background[2], &sc.background[3]);
+      continue;
+    }
+
+    if(strncmp(buffer, "#range view", 11) == 0){
+      sscanf(buffer, "%*s %f %f %f %f", &sc.rangeView[0], &sc.rangeView[1], &sc.rangeView[2], &sc.rangeView[3]);
+      continue;
+    }
+
+    if(strncmp(buffer, "#frame", 6) == 0){
+      readingAtoms = true;
+      fr = Frame();
+      continue;
+    }
+    if(strncmp(buffer, "#end frame", 10) == 0){
+      readingAtoms = false;
+      traj.addFrame(fr);
+      continue;
+    }
+    if(strncmp(buffer, "#style", 6) == 0){
+      char stname[1024];
+      sscanf(buffer,"%*s %s", stname);
+      Style st(stname);
+      for(short ne=0; ne<props::NUMELEM; ne++){
+        if(fgets(buffer, 1024, file) == NULL) break;
+        if(strncmp(buffer, "#end style", 10) == 0) break; // finish if reached end of style
+
+        //read the values of style st
+        char elem[3];
+        float s, r, c;
+        glm::vec4 color;
+        int nread = sscanf(buffer,"%s %f %f %f %f %f %f %f", elem, &s, &r, &c, &color[0],&color[1], &color[2], &color[3]);
+        if (nread != 8) continue;
+        short atomicNumber = props::atomicNumber(elem);
+        st.spheres[atomicNumber] = s;
+        st.radios[atomicNumber] = r;
+        st.cylinders[atomicNumber] = c;
+        st.colors[atomicNumber] = color;
+      } //end for
+      styles.push_back(st);
+    } // end style
+    
+    if(readingAtoms){
+      glm::vec3 coor;
+      int atNum;
+      char atype[10], residue[10], style[1024];
+      sscanf(buffer, "%i %f %f %f %s %s %s", &atNum, &coor[0], &coor[1], &coor[2], atype, residue, style);
+      Atom& at = fr.addAtom(atNum, coor);
+      strncpy(at.atomType, atype, 10);
+      strncpy(at.residue, residue, 10);
+      at.setStyle(style);
+      continue;
+    }
+  }
+
+  sc.defaultParams = false;
+
+  return 0;
+}
+
 
 unsigned int rw::writeCIF(const char * fileName, Trajectory &traj){
    traj.cartesianToFractional();
@@ -1642,51 +1994,61 @@ unsigned int rw::writeXTL(const char * fileName, Trajectory &traj){
 }
 
 
-//
-//unsigned int writePDB(const char * fileName, Trajectory &traj){
-//    FILE *file;
-//    file = fopen(fileName, "w");
-//    
-//    for(unsigned int i = 0; i < traj.numStructures(); i++){
-//        Structure &st = traj.structureById(i);
-//
-//	st.shiftBackToOriginalCentroid();
-//
-//        //can fail for long cell unit vectors ~100
-//	fprintf(file, "CRYST1 %8.3f %8.3f %8.3f %6.2f %6.2f %6.2f\n", st.a, st.b, st.c, st.alpha, st.beta, st.gamma);
-//        fprintf(file, "MODEL     %d\n", i+1);
-//        //printf("REMARK 250 time=%.3f picoseconds\n", timeInPs);
-//        //printf("REMARK \n");
-//	for(unsigned int j = 0; j < st.totNumberOfAtoms(); j++){
-//            if(st.atom(j).deleted) continue; 
-//	    // Hetatm label
-//            fprintf(file, "HETATM");
-//            fprintf(file, "%5d", j+1);  //serial number
-//	    fprintf(file, " ");  //empty character
-//	    fprintf(file, "%4s", st.atom(j).atomType.c_str()); //atom name
-//	    fprintf(file, " ");   //character alternate location 
-//	    fprintf(file, "UNK"); //residue name
-//            fprintf(file, " A");  //chain identifier
-//	    fprintf(file, "   1"); //residue sequence number
-//            fprintf(file, "    "); //code for insertion of residues
-//            fprintf(file, "%8.3f%8.3f%8.3f", 
-//			    st.atom(j).x(), st.atom(j).y(), st.atom(j).z());
-//            fprintf(file, "  1.00"); //occupancy (6.2)
-//	    fprintf(file, "  0.00"); //temperature factor 6.2
-//	    fprintf(file, "      "); //empty  no especification
-//            fprintf(file, "    "); //segment identifier 4 left justified
-//            //atom symbol , right justified, in C is right justified by default,
-//            fprintf(file, "%2s", st.atom(j).cymbol());  
-//	    fprintf(file, "%2d\n", st.atom(j).charge); //charge      
-//        }
-//        fprintf(file, "ENDMDL\n"); // end of trajectory frame
-//
-//	st.shiftToZeroCentroid();
-//    }
-//
-//    fclose(file);
-//    return 0;
-//}
+unsigned int rw::writePDB(const char * fileName, Trajectory &traj, const rw::FrameChooser &fc){
+  FILE *file;
+  file = fopen(fileName, "w");
+  if( file == NULL ){
+    printf("Impossible to open the file named  %s for writing!\n", fileName);
+    return 1;
+  }
+
+  int first = fc.first - 1;
+  int last;
+  if(fc.last < 0 || (unsigned int)fc.last >= traj.numFrames()){
+    last = traj.numFrames();
+  }
+  else{
+    last = fc.last;
+  }
+
+  for(int i = first; i < last; i+= fc.stride){
+    Frame &fr = traj.frame(i);
+    Cell cell = fr.cell();
+
+    //can fail for long cell unit vectors ~100
+	  fprintf(file, "CRYST1 %8.3f %8.3f %8.3f %6.2f %6.2f %6.2f\n", cell.a(), cell.b(), cell.c(), 
+                                                                  cell.alpha(), cell.beta(), cell.gamma());
+    fprintf(file, "MODEL     %d\n", i+1);
+    //printf("REMARK 250 time=%.3f picoseconds\n", timeInPs);
+    //printf("REMARK \n");
+	  for(unsigned int j = 0; j < fr.numAtoms(); j++){
+      Atom& at = fr.atom(j);
+	    // Hetatm label
+      fprintf(file, "HETATM");
+      fprintf(file, "%5d", j+1);  //serial number
+	    fprintf(file, " ");  //empty character
+	    fprintf(file, "%4s", at.atomType); //atom name
+	    fprintf(file, " ");   //character alternate location 
+	    fprintf(file, "%4s", at.residue); //residue name
+      fprintf(file, " A");  //chain identifier
+	    fprintf(file, "   1"); //residue sequence number
+      fprintf(file, "    "); //code for insertion of residues
+      fprintf(file, "%8.3f%8.3f%8.3f", at.coor.x, at.coor.y, at.coor.z);
+      fprintf(file, "  1.00"); //occupancy (6.2)
+	    fprintf(file, "  0.00"); //temperature factor 6.2
+	    fprintf(file, "      "); //empty  no especification
+      fprintf(file, "    "); //segment identifier 4 left justified
+      //atom symbol , right justified, in C is right justified by default,
+      fprintf(file, "%2s ", at.symbol());  
+	    fprintf(file, "%2f\n", at.charge); //charge      
+    }//end for atom
+    
+    fprintf(file, "ENDMDL\n"); // end of trajectory frame
+  } //end for frames
+
+  fclose(file);
+  return 0;
+}
 
 
 unsigned int rw::writePOSCAR(const char *fileName, Trajectory &traj){
@@ -1782,20 +2144,21 @@ unsigned int rw::writePOSCAR(const char *fileName, Trajectory &traj){
 }
 
 
-unsigned int rw::writeXYZ(const char *fileName, Trajectory &traj, const FrameChooser &fc){
+unsigned int rw::writeXYZ(const char *fileName, Trajectory &traj, const FrameChooser &fc, const char* mode){
   FILE *file;
-  file = fopen(fileName, "w");
+  file = fopen(fileName, mode);
   if( file == NULL ){
     printf("Impossible to open the file named  %s for writing!\n", fileName);
     return 1;
   }
+
   int first = fc.first - 1;
   int last;
   if(fc.last < 0 || (unsigned int)fc.last >= traj.numFrames()){
-      last = traj.numFrames();
+    last = traj.numFrames();
   }
   else{
-      last = fc.last;
+    last = fc.last;
   }
   for(int i = first; i < last; i+= fc.stride){
       Frame &fr = traj.frame(i);
@@ -1809,6 +2172,60 @@ unsigned int rw::writeXYZ(const char *fileName, Trajectory &traj, const FrameCho
       }
   }
    fclose(file);
+   return 0;
+}
+
+
+unsigned int rw::writeXDATCAR(const char *fileName, Trajectory &traj, const FrameChooser &fc, const char* mode){
+  return 0;
+   FILE *outfile;
+   outfile = fopen(fileName, mode);
+   std::vector <std::vector<int>> index_group;
+   //temporary vector that stores the indices that go inside index groups
+   std::vector<int> tempvector, atoms; 
+   std::vector<std::string> labels;
+
+  std::vector<AtomStatis> atomstatis;
+   fprintf(outfile, " \n  %f \n", traj.volScale);
+
+   // write cell 
+   glm::mat3 cell = traj.cell();
+   for(unsigned int i=0; i<3; i++){
+       for(unsigned int j=0; j<3; j++){
+           fprintf(outfile, "  % 20.16f    ", cell[i][j]/traj.volScale );
+       }
+       fprintf(outfile, " \n");
+   }
+   // write labels
+  
+   for(unsigned int i=0; i < labels.size(); i++){
+     fprintf(outfile, "   %s  ", labels[i].c_str());
+   }
+   fprintf(outfile, " \n");
+   
+   //write atoms
+   for(unsigned int i=0;i < atoms.size();i++){
+       fprintf(outfile, "   %i  ", atoms[i]);
+   }
+   fprintf(outfile, " \n");
+
+   if(traj.cartesian()){
+        fprintf(outfile, "Cartesian \n");
+   }else{
+        fprintf(outfile, "Direct \n");
+   }
+
+   for(unsigned int i=0;i < index_group.size(); i++){
+       for(unsigned int k=0; k < index_group[i].size(); k++){
+           unsigned int index = index_group[i][k];
+           for(unsigned int j=0; j<3; j++){
+               fprintf(outfile, " % 20.16f", traj.atom(index).coor[j]);
+           }
+           fprintf(outfile, " \n");
+       }
+   }
+
+   fclose(outfile);
    return 0;
 }
 
@@ -1831,10 +2248,30 @@ unsigned int rw::writeDLPOLY_CONFIG(const char *fileName, Trajectory &traj){
     fprintf(file, "%20.10f %20.10f %20.10f\n", cell[i][0], cell[i][1], cell[i][2]);
   } //write cell
 
+  //order atoms
+  Frame &fr = traj.currentFrame();
+  vector<string> atomtypes = fr.orderByAtomType();
+  traj.generateBonds();
+  vector<unsigned int> numPerType;
+  //initialize numPerType with zeros and eachtype with atom objs
+  vector<Atom> eachType;
+  Atom at;
+  for(unsigned int i = 0; i<atomtypes.size(); i++){
+    numPerType.push_back(0);
+    eachType.push_back(at);
+  }
+
   for(unsigned int i = 0; i<traj.numAtoms(); i++){
     Atom &at = traj.atom(i);
     fprintf(file, "%s          %i\n", at.atomType, i+1);
     fprintf(file, "%20.10f %20.10f %20.10f\n", at.coor.x, at.coor.y, at.coor.z);
+
+    for(unsigned int n = 0; n <atomtypes.size(); n++){
+      if(atomtypes[n].compare(at.atomType) == 0){
+        numPerType[n] += 1;
+        eachType[n] = at;
+      }
+    }
   }
 
   //write field file
@@ -1846,15 +2283,18 @@ unsigned int rw::writeDLPOLY_CONFIG(const char *fileName, Trajectory &traj){
   // i have to write it with right order, by molecules to match the FIELD FILE
   fprintf(fieldfile, "NUMMOLS%14d\n", 1);
   fprintf(fieldfile, "ATOMS%17d\n", (int)traj.numAtoms());
-  for(unsigned int i = 0; i < traj.numAtoms(); i++){
-    Atom &at = traj.atom(i);
-    fprintf(fieldfile, "%s    %f     %f       %i     %i\n", at.atomType, props::masas[at.atomicNum], at.charge, 1, 0);
+  for(unsigned int i = 0; i < atomtypes.size(); i++){
+    Atom &at = eachType[i];
+    fprintf(fieldfile, "%10s    %10.6f   %10.6f    %10i    %i\n", at.atomType, props::masas[at.atomicNum], at.charge, numPerType[i], 0);
   }
-  fprintf(fieldfile, "BONDS%17d\n", (int)traj.numBonds());
-  for(unsigned int i = 0; i< traj.numBonds(); i++){
-    Bond& b = traj.bond(i);
-    fprintf(fieldfile, "harm     %i    %i     \n", b.at1+1, b.at2+1);
-  }
+
+  //Doest not make much sense to print bonds without the parameters
+  // fprintf(fieldfile, "BONDS%17d\n", (int)traj.numBonds());
+  // for(unsigned int i = 0; i< traj.numBonds(); i++){
+  //   Bond& b = traj.bond(i);
+  //   fprintf(fieldfile, "harm     %i    %i     \n", b.at1+1, b.at2+1);
+  // }
+
   fprintf(fieldfile, "FINISH\n");
 
   fclose(file);
@@ -1891,7 +2331,7 @@ unsigned int rw::writeGULP_Input(const char *fileName, Trajectory &traj){
   return 0;
 }
 
-unsigned int rw::writeImage(const char *fileName, Trajectory &traj, rw::Povray &pr){
+unsigned int rw::writeImage(const char *fileName, Trajectory &traj, rw::Scene &sc){
   setlocale(LC_NUMERIC, "en_EN");
   FILE *file;
   string fileNameTemp = "temp.pov";
@@ -1903,25 +2343,25 @@ unsigned int rw::writeImage(const char *fileName, Trajectory &traj, rw::Povray &
   fprintf(file, "global_settings {\n"
                     "        ambient_light rgb <%f, %f, %f>\n"
                     "       max_trace_level 15\n"
-                    "}\n\n", pr.ambienLightColor[0], pr.ambienLightColor[1], pr.ambienLightColor[2]);
+                    "}\n\n", sc.ambienLightColor[0], sc.ambienLightColor[1], sc.ambienLightColor[2]);
   
-  fprintf(file, "background { color rgb <%f, %f, %f> }\n\n", pr.background[0], pr.background[1], pr.background[2]);
-  fprintf(file, "camera {\n       %s\n       angle %f\n", pr.orthographic.c_str(), pr.fov);
-  fprintf(file, "       location <%f, %f, %f>\n", pr.cameraLocation[0], pr.cameraLocation[1], pr.cameraLocation[2]);
-  fprintf(file, "       sky <%f, %f, %f>\n", pr.sky[0], pr.sky[1], pr.sky[2]);
-  fprintf(file, "       up <%f, %f, %f>\n", pr.cameraUp[0], pr.cameraUp[1], pr.cameraUp[2]);
-  fprintf(file, "       right <%f, %f, %f>\n", pr.cameraRight[0], pr.cameraRight[1], pr.cameraRight[2]);
-  fprintf(file, "       look_at <%f, %f, %f> }\n", pr.cameraLookAt[0], pr.cameraLookAt[1], pr.cameraLookAt[2]);
+  fprintf(file, "background { color rgb <%f, %f, %f> }\n\n", sc.background[0], sc.background[1], sc.background[2]);
+  fprintf(file, "camera {\n       %s\n       angle %f\n", sc.orthographic.c_str(), sc.fov);
+  fprintf(file, "       location <%f, %f, %f>\n", sc.cameraLocation[0], sc.cameraLocation[1], sc.cameraLocation[2]);
+  fprintf(file, "       sky <%f, %f, %f>\n", sc.sky[0], sc.sky[1], sc.sky[2]);
+  fprintf(file, "       up <%f, %f, %f>\n", sc.cameraUp[0], sc.cameraUp[1], sc.cameraUp[2]);
+  fprintf(file, "       right <%f, %f, %f>\n", sc.cameraRight[0], sc.cameraRight[1], sc.cameraRight[2]);
+  fprintf(file, "       look_at <%f, %f, %f> }\n", sc.cameraLookAt[0], sc.cameraLookAt[1], sc.cameraLookAt[2]);
 
   fprintf(file, "light_source {\n");
-  fprintf(file, "        <%f, %f, %f>\n", pr.lightLocation[0], pr.lightLocation[1], pr.lightLocation[2]);
-  fprintf(file, "        color rgb <%f, %f, %f> %s \n", pr.lightColor[0], pr.lightColor[1], pr.lightColor[2], pr.shadowless.c_str());
+  fprintf(file, "        <%f, %f, %f>\n", sc.lightLocation[0], sc.lightLocation[1], sc.lightLocation[2]);
+  fprintf(file, "        color rgb <%f, %f, %f> %s \n", sc.lightColor[0], sc.lightColor[1], sc.lightColor[2], sc.shadowless.c_str());
   //                  "        fade_distance %f\n"
   //                  "        fade_power %f\n"
   fprintf(file,       "        parallel\n");
-  fprintf(file, "        point_at <%f, %f, %f>\n}\n", pr.lightPointAt[0], pr.lightPointAt[1], pr.lightPointAt[2]);
+  fprintf(file, "        point_at <%f, %f, %f>\n}\n", sc.lightPointAt[0], sc.lightPointAt[1], sc.lightPointAt[2]);
   fprintf(file,  "#default {\n        finish {ambient %f diffuse %f specular %f roughness %f metallic %f}\n}\n",
-                                pr.ambient, pr.diffuse, pr.specular, pr.roughness, pr.metallic);
+                                sc.ambient, sc.diffuse, sc.specular, sc.roughness, sc.metallic);
 
 
   //fprintf(file,  "union {\n");
@@ -1968,21 +2408,36 @@ unsigned int rw::writeImage(const char *fileName, Trajectory &traj, rw::Povray &
     
   }
 
+  //draw unit cell
+  if(sc.unitCellMustBeDrawn){
+    for(unsigned int i = 0; i < 12; i++){
+      //rotate matrix
+      glm::vec3 &initL =  traj.cellLine(2*i);
+      glm::vec3 &endL = traj.cellLine(2*i+1);
+      glm::vec4 &color = traj.cellLineColor(i);
+      fprintf(file, "cylinder {\n        <%f, %f, %f>,  <%f, %f, %f>, %f  \n", 
+                      initL.x, initL.y, initL.z, endL.x, endL.y, endL.z, 0.02f);
+
+      fprintf(file, "     pigment { rgbt <%f, %f, %f, %f> }\n}\n", color[0], color[1],color[2],1-color[3]);
+    }
+  }
   //fprintf(file, "}\nmerge {\n}");
   fclose(file);
   string f(fileName);
-  string cmd = "povray -Itemp.pov -O" + f + " +W"+ std::to_string(pr.width) + 
-                " +H" + std::to_string(pr.height) + "+V  +FN +Q9 -P -UD +UL +UV +A +AM2 -d";
-  system(cmd.c_str());
-  //system("rm ./temp.pov");
+  string cmd = "povray -Itemp.pov -O" + f + " +W"+ std::to_string(sc.width) + 
+                " +H" + std::to_string(sc.height) + "+V  +FN +Q9 -P -UD +UL +UV +A +AM2 -d";
+  int outcode = system(cmd.c_str());
+  printf("exit code of convert command %i \n", outcode);
+  //outcode = system("rm ./temp.pov");
   return 0;
 }
 
 
-unsigned int rw::writeGIF(const char *fileName, Trajectory &traj, rw::Povray &pr, rw::FrameChooser& fc){
+unsigned int rw::writeGIF(const char *fileName, Trajectory &traj, rw::Scene &sc, rw::FrameChooser& fc){
   setlocale(LC_NUMERIC, "en_EN");
   FILE *file;
   string fileNameTemp = "temp.pov";
+  int outcode;
   file = fopen(fileNameTemp.c_str(), "w");
   if( file == NULL ){
     printf("Impossible to open the file named  %s for writing!\n", fileName);
@@ -1990,32 +2445,32 @@ unsigned int rw::writeGIF(const char *fileName, Trajectory &traj, rw::Povray &pr
   }
   printf("frame chooser: %i %i %i\n", fc.first, fc.last, fc.stride);
 
-  for(unsigned int frameInd = fc.first; frameInd < fc.last; frameInd+=fc.stride){
+  for(int frameInd = fc.first; frameInd < fc.last; frameInd+=fc.stride){
     bool setf = traj.setCurrentFrameIndex(frameInd);
     printf("creating movie for frame %i   set? %i\n", frameInd, setf);
     traj.generateBonds();
     fprintf(file, "global_settings {\n"
                         "        ambient_light rgb <%f, %f, %f>\n"
                         "       max_trace_level 15\n"
-                        "}\n\n", pr.ambienLightColor[0], pr.ambienLightColor[1], pr.ambienLightColor[2]);
+                        "}\n\n", sc.ambienLightColor[0], sc.ambienLightColor[1], sc.ambienLightColor[2]);
     
-    fprintf(file, "background { color rgb <%f, %f, %f> }\n\n", pr.background[0], pr.background[1], pr.background[2]);
-    fprintf(file, "camera {\n       %s\n       angle %f\n", pr.orthographic.c_str(), pr.fov);
-    fprintf(file, "       location <%f, %f, %f>\n", pr.cameraLocation[0], pr.cameraLocation[1], pr.cameraLocation[2]);
-    fprintf(file, "       sky <%f, %f, %f>\n", pr.sky[0], pr.sky[1], pr.sky[2]);
-    fprintf(file, "       up <%f, %f, %f>\n", pr.cameraUp[0], pr.cameraUp[1], pr.cameraUp[2]);
-    fprintf(file, "       right <%f, %f, %f>\n", pr.cameraRight[0], pr.cameraRight[1], pr.cameraRight[2]);
-    fprintf(file, "       look_at <%f, %f, %f> }\n", pr.cameraLookAt[0], pr.cameraLookAt[1], pr.cameraLookAt[2]);
+    fprintf(file, "background { color rgb <%f, %f, %f> }\n\n", sc.background[0], sc.background[1], sc.background[2]);
+    fprintf(file, "camera {\n       %s\n       angle %f\n", sc.orthographic.c_str(), sc.fov);
+    fprintf(file, "       location <%f, %f, %f>\n", sc.cameraLocation[0], sc.cameraLocation[1], sc.cameraLocation[2]);
+    fprintf(file, "       sky <%f, %f, %f>\n", sc.sky[0], sc.sky[1], sc.sky[2]);
+    fprintf(file, "       up <%f, %f, %f>\n", sc.cameraUp[0], sc.cameraUp[1], sc.cameraUp[2]);
+    fprintf(file, "       right <%f, %f, %f>\n", sc.cameraRight[0], sc.cameraRight[1], sc.cameraRight[2]);
+    fprintf(file, "       look_at <%f, %f, %f> }\n", sc.cameraLookAt[0], sc.cameraLookAt[1], sc.cameraLookAt[2]);
 
     fprintf(file, "light_source {\n");
-    fprintf(file, "        <%f, %f, %f>\n", pr.lightLocation[0], pr.lightLocation[1], pr.lightLocation[2]);
-    fprintf(file, "        color rgb <%f, %f, %f> %s \n", pr.lightColor[0], pr.lightColor[1], pr.lightColor[2], pr.shadowless.c_str());
+    fprintf(file, "        <%f, %f, %f>\n", sc.lightLocation[0], sc.lightLocation[1], sc.lightLocation[2]);
+    fprintf(file, "        color rgb <%f, %f, %f> %s \n", sc.lightColor[0], sc.lightColor[1], sc.lightColor[2], sc.shadowless.c_str());
     //                  "        fade_distance %f\n"
     //                  "        fade_power %f\n"
     fprintf(file,       "        parallel\n");
-    fprintf(file, "        point_at <%f, %f, %f>\n}\n", pr.lightPointAt[0], pr.lightPointAt[1], pr.lightPointAt[2]);
+    fprintf(file, "        point_at <%f, %f, %f>\n}\n", sc.lightPointAt[0], sc.lightPointAt[1], sc.lightPointAt[2]);
     fprintf(file,  "#default {\n        finish {ambient %f diffuse %f specular %f roughness %f metallic %f}\n}\n",
-                                    pr.ambient, pr.diffuse, pr.specular, pr.roughness, pr.metallic);
+                                    sc.ambient, sc.diffuse, sc.specular, sc.roughness, sc.metallic);
 
 
     //fprintf(file,  "union {\n");
@@ -2062,16 +2517,75 @@ unsigned int rw::writeGIF(const char *fileName, Trajectory &traj, rw::Povray &pr
     std::stringstream ss;
     ss << std::setw(6) << std::setfill('0') << frameInd;
     string f = "_tempImg-" + ss.str() + ".png";
-    string cmd = "povray -Itemp.pov -O" + f + " +W"+ std::to_string(pr.width) + 
-                    " +H" + std::to_string(pr.height) + "+V  +FN +Q9 -P -UD +UL +UV +A +AM2";
-    system(cmd.c_str());
+    string cmd = "povray -Itemp.pov -O" + f + " +W"+ std::to_string(sc.width) + 
+                    " +H" + std::to_string(sc.height) + "+V  +FN +Q9 -P -UD +UL +UV +A +AM2";
+    outcode = system(cmd.c_str());
   }//end for temp.pov
   //system("rm ./temp.pov");
   string f = fileName;
   string gifcmd = "conver -delay 5 _tempImg*png  " + f + ".gif";
-  system(gifcmd.c_str());
+  outcode = system(gifcmd.c_str());
+  printf("exit code of convert command %i \n", outcode);
   return 0;
 }
 
+unsigned int rw::writeTigre(const char *fileName, Trajectory &traj, rw::Scene &sc, const FrameChooser &fc){
+  setlocale(LC_NUMERIC, "en_EN");
+  FILE *file;
+  std::vector<Style> outstyles;
+  file = fopen(fileName, "w");
+  if( file == NULL ){
+    printf("Impossible to open the file named  %s for writing!\n", fileName);
+    return 1;
+  }
+
+  printf("writing file with %i %i %i \n", fc.first, fc.last, fc.stride);
+  fprintf(file, "#camera position %f %f %f \n", sc.cameraLocation[0], sc.cameraLocation[1], sc.cameraLocation[2]);
+  fprintf(file, "#camera up %f %f %f\n", sc.sky[0], sc.sky[1], sc.sky[2]);
+  fprintf(file, "#camera lookat %f %f %f\n", sc.cameraLookAt[0], sc.cameraLookAt[1], sc.cameraLookAt[2]);
+  fprintf(file, "#light position %f %f %f\n", sc.lightLocation[0], sc.lightLocation[1],sc.lightLocation[2]);
+  fprintf(file, "#bg %f %f %f %f\n", sc.background[0], sc.background[1], sc.background[2], sc.background[3]);
+  fprintf(file, "#range view %f %f %f %f\n", sc.rangeView[0],  sc.rangeView[1],  sc.rangeView[2],  sc.rangeView[3]);
+
+  int first = fc.first - 1;
+  int last;
+  if(fc.last < 0 || (unsigned int)fc.last >= traj.numFrames()){
+    last = traj.numFrames();
+  }
+  else{
+    last = fc.last;
+  }
+  //find out which styles are to be saved
+  for(unsigned int i=0; i<traj.numAtoms(); i++){
+    Atom &at = traj.atom(i);
+    if(std::find(outstyles.begin(), outstyles.end(), at.style()) == outstyles.end()){ //not found
+      outstyles.push_back(at.style());
+    }
+  }
+  //output the styles
+  for(auto &st:outstyles){
+    fprintf(file, "#style %s  sphere radius cylinder color1 color2 color3 color4\n", st.name.c_str());
+    for(short ne = 0; ne < props::NUMELEM; ne++){
+      fprintf(file, "%s %4.2f %4.2f %4.2f %8.6f %8.6f %8.6f %8.6f\n", 
+                     props::atomicSymbols[ne], st.spheres[ne], st.radios[ne], st.cylinders[ne],
+                     st.colors[ne][0], st.colors[ne][1], st.colors[ne][2], st.colors[ne][3]);
+    }
+    fprintf(file, "#end style\n");
+  }
+
+  for(int i = first; i < last; i+= fc.stride){
+    traj.setCurrentFrameIndex(i);
+    fprintf(file, "#frame %i\n", i);
+    for(unsigned int ai = 0; ai < traj.numAtoms(); ai++){
+      Atom &at = traj.atom(ai);
+      fprintf(file, "%i %.3f %.3f %.3f ", at.atomicNum, at.coor.x, at.coor.y, at.coor.z);
+      fprintf(file, "%s %s %s ", at.atomType, at.residue, at.style().name.c_str());
+      fprintf(file, "\n");
+    }
+    fprintf(file, "#end frame\n");
+  }
+  fclose(file);
+  return 0;
+}
 
 //// --------------------- functions to read and write files ---------------

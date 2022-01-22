@@ -13,6 +13,7 @@ file(GLOB bfc
     "./src/frame.cpp"
     "./src/trajectory.cpp"
     "./src/rw.cpp"
+    "./src/cell.cpp"
 )
 
 
