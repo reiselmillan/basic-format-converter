@@ -1167,141 +1167,113 @@ unsigned int rw::loadPOSCAR(const char *fileName, Trajectory &traj){
   return 0;
 }
 
-//unsigned int loadPDB(const char *fileName, Trajectory &traj){
-//    FILE *file;
-//    char buffer[1024], symbol[3]; //spaceGroup[10];
-//    char vector[9], x[9], y[9], z[9]; //for unit cell and coordinates
-//    float fx, fy, fz;
-//    //int index;
-//    int counter = 0;
-//    Structure st;
-//    file = fopen(fileName, "r");
-//    float temp_a, temp_b, temp_c, temp_alpha, temp_beta, temp_gamma;
-//
-//    bool foundBondInfo = false;
-//
-//    while(fgets(buffer, 1024, file) != NULL){
-//        if(strncmp(buffer, "MODEL ", 6) == 0) {
-//            //st = Structure();
-//	    //st.index = 
-//	    continue;
-//	}
-//	//read unit cell    
-//        if(strncmp(buffer, "CRYST1", 6) == 0) {
-//	    strncpy(vector, buffer+6, 9);
-//	    vector[9] = '\0';
-//	    st.a = atof(vector);
-//	    strncpy(vector, buffer+15, 9);
-//	    vector[9] = '\0';
-//	    st.b = atof(vector);
-//	    strncpy(vector, buffer+24, 9);
-//	    vector[9] = '\0';
-//	    st.c = atof(vector);
-//	    strncpy(vector, buffer+33, 7);
-//	    vector[7] = '\0';
-//	    st.alpha = atof(vector);
-//	    strncpy(vector, buffer+40, 7);
-//	    vector[7] = '\0';
-//	    st.beta = atof(vector);
-//	    strncpy(vector, buffer+47, 7);
-//	    vector[7] = '\0';
-//	    st.gamma = atof(vector);
-//	    //st.spaceGroup = spaceGroup;
-//	    //printf("%f__%f__%f__%f__%f__%f\n", st.a, st.b, st.c, st.alpha, st.beta, st.gamma);
-//	    //return 0;
-//            st.setUnitCellVectorsComponents();
-//            //st.fractionalToCartesian();
-//            st.showCell = true;
-//	    //store in case is the same for all frames
-//	    temp_a = st.a; temp_b = st.b; temp_c = st.c;
-//	    temp_alpha = st.alpha; temp_beta = st.beta; temp_gamma = st.gamma;
-//	    continue;
-//	}
-//
-//	// read atom
-//	if(strncmp(buffer, "ATOM  ", 6) == 0 || strncmp(buffer, "HETATM", 6)==0){
-//	    strncpy(x, buffer+30, 8);
-//	    x[8] = '\0';
-//	    fx = atof(x);
-//	    strncpy(y, buffer+38, 8);
-//	    y[8] = '\0';
-//	    fy = atof(y);
-//	    strncpy(z, buffer+46, 8);
-//	    z[8] = '\0';
-//	    fz = atof(z);
-//	    strncpy(symbol, buffer+76, 2);
-//	    symbol[2] = '\0';
-//	    rwTrimCString(symbol);
-////	    if(symbol[0] == ' '){ 
-////	       strncpy(symbol, buffer+77, 1);
-////	       symbol[1] = '\0';
-////	    }
-//	    unsigned int lastId = st.addAtom(symbol, fx, fy, fz);
-//
-//	    //atom type and residue
-//            char atomtype[5], residue[4];
-//	    strncpy(atomtype, buffer+12, 4);
-//	    atomtype[4] = '\0';
-//	    rwTrimCString(atomtype);
-//	    st.atom(lastId).atomType = atomtype;
-//	    
-//	    strncpy(residue, buffer+17, 3);
-//	    residue[3] = '\0';
-//	    st.atom(lastId).residue = residue;
-//	    //atom type and residue
-//
-//	    continue;
-//	}
-//	if(strncmp(buffer, "CONECT", 6) == 0 ){
-//	    foundBondInfo = true;
-//	    char atom1[5], bonded[5];
-//	    strncpy(atom1, buffer+7, 5);
-//	    atom1[5] = '\0';
-//	    int atom1Index = atoi(atom1) - 1;
-//
-//	    //starting adding bonds
-//	    //loop over the 4 fields
-//	    array<int, 4> initColumn = {12, 17, 22, 27};
-//	    for(auto column:initColumn){
-//                strncpy(bonded, buffer + column, 5);
-//                bonded[5] = '\0';
-//                int bondedIndex = atoi(bonded) - 1; //if zero probably because of empty string
-//		if(bondedIndex == -1)
-//		    continue;
-//                st.addBond(atom1Index, bondedIndex);
-//	    }
-//            
-//	    continue;
-//	}
-//	
-//	if(strncmp(buffer, "ENDMDL", 6) == 0 || strncmp(buffer, "END", 3) == 0){
-//	    // it is used at the end of the while loop to check if structure has been added to traj
-//	    counter ++;  
-//	    if(!st.cellIsSet){
-//	        st.a = temp_a; st.b = temp_b; st.c = temp_c;
-//	        st.alpha = temp_alpha; st.beta = temp_beta; st.gamma = temp_gamma;
-//                st.setUnitCellVectorsComponents();
-//                st.showCell = true;
-//	    }
-//            traj.addStructure(st);
-//	    //st.clearAtoms();//ojo esto no esta quitando los residues puede dar problemas
-//	    st = Structure();
-//	    continue;
-//	    //st.clear();
-//	}
-//    }
-//    if(counter == 0){
-//        traj.addStructure(st);
-//    }
-//    fclose(file);
-//    
-//    if(!foundBondInfo) {
-//        //traj.generateBonds(-1);
-//    }
-//    
-//    return 0;
-//}
-//
+unsigned int loadPDB(const char *fileName, Trajectory &traj){
+  //  FILE *file;
+  char buffer[1024], symbol[3]; //spaceGroup[10];
+  char vector[9], x[9], y[9], z[9]; //for unit cell and coordinates
+  float fx, fy, fz;
+  //int index;
+  int counter = 0;
+  FILE* file = fopen(fileName, "r");
+  Frame fr;
+
+  bool foundBondInfo = false;
+
+  while(fgets(buffer, 1024, file) != NULL){
+    if(strncmp(buffer, "MODEL ", 6) == 0) {
+      continue;
+	  }
+
+	//read unit cell    
+    if(strncmp(buffer, "CRYST1", 6) == 0) {  //"CRYST1 xxxxx xxxxx xxxxx xxxxx xxxxxxx"
+      float temp_a, temp_b, temp_c, temp_alpha, temp_beta, temp_gamma;
+	    strncpy(vector, buffer+6, 9);
+	    vector[9] = '\0';
+	    temp_a = atof(vector);
+	    strncpy(vector, buffer+15, 9);
+	    vector[9] = '\0';
+	    temp_b = atof(vector);
+	    strncpy(vector, buffer+24, 9);
+	    vector[9] = '\0';
+	    temp_c = atof(vector);
+	    strncpy(vector, buffer+33, 7);
+	    vector[7] = '\0';
+	    temp_alpha = atof(vector);
+	    strncpy(vector, buffer+40, 7);
+	    vector[7] = '\0';
+	    temp_beta = atof(vector);
+	    strncpy(vector, buffer+47, 7);
+	    vector[7] = '\0';
+	    temp_gamma = atof(vector);
+
+      Cell cell(temp_a, temp_b, temp_c, temp_alpha, temp_beta, temp_gamma);
+      fr.setUnitCell(cell);
+
+	    continue;
+	}
+
+	// read atom
+	if(strncmp(buffer, "ATOM  ", 6) == 0 || strncmp(buffer, "HETATM", 6)==0){
+    strncpy(x, buffer+30, 8);
+    x[8] = '\0';
+    fx = atof(x);
+    strncpy(y, buffer+38, 8);
+    y[8] = '\0';
+    fy = atof(y);
+    strncpy(z, buffer+46, 8);
+    z[8] = '\0';
+    fz = atof(z);
+    strncpy(symbol, buffer+76, 2);
+    symbol[2] = '\0';
+	  Atom &at = fr.addAtom(symbol, fx, fy, fz);
+
+    //atom type 
+    char atomtype[5], residue[4];
+    strncpy(atomtype, buffer+12, 4);
+    atomtype[4] = '\0';
+    strncpy(at.atomType, atomtype, 4);
+    
+    // read residue
+    strncpy(residue, buffer+17, 3);
+    residue[3] = '\0';
+    strncpy(at.residue, residue, 3);
+	  continue;
+	}
+
+	// if(strncmp(buffer, "CONECT", 6) == 0 ){
+  //   foundBondInfo = true;
+  //   char atom1[5], bonded[5];
+  //   strncpy(atom1, buffer+7, 5);
+  //   atom1[5] = '\0';
+  //   int atom1Index = atoi(atom1) - 1;
+
+  //   //starting adding bonds
+  //   //loop over the 4 fields
+  //   array<int, 4> initColumn = {12, 17, 22, 27};
+  //   for(auto column:initColumn){
+  //     strncpy(bonded, buffer + column, 5);
+  //     bonded[5] = '\0';
+  //     int bondedIndex = atoi(bonded) - 1; //if zero probably because of empty string
+  //     if(bondedIndex == -1)
+  //       continue;
+  //     }
+          
+  //   continue;
+	// }
+	
+	if(strncmp(buffer, "ENDMDL", 6) == 0 || strncmp(buffer, "END", 3) == 0){
+	    // it is used at the end of the while loop to check if structure has been added to traj
+	    counter ++; 
+      traj.addFrame(fr);
+	    fr = Frame();
+	    continue;
+	  }
+  } // end while
+  
+   fclose(file);
+   return 0;
+}
+
 
 
 unsigned int rw::loadCIF(const char *fileName, Trajectory &traj){

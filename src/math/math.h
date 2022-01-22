@@ -32,6 +32,7 @@ namespace math{
   void rotateVector(float ang, std::array<float, 3> &rotvec, std::array<float, 3> &refcoors);
   void VectorNormalisation(float v[3]);
   float calcAngle(const glm::vec3 &p1, const glm::vec3 &p2, const glm::vec3 &p3);
+  float calcAngle(const Atom &a1, const Atom &a2, const Atom &a3);
   float calcAngleRadians(const std::array<float,3> &p1, const std::array<float,3> &p2, const std::array<float,3> &p3);
   float calcCosAngle(std::array<float,3>v1, std::array<float,3>v2);
   float calcDihedral(std::array<float,3>p1, std::array<float,3>p2, std::array<float,3>p3, std::array<float,3>p4);
@@ -46,6 +47,8 @@ namespace math{
   //float average(vector<int> list);
   bool matrixIsIdentity(std::array<std::array<float, 4>, 3> &rmat);
   bool setDistance(Atom &at1, Atom &at2, float d);
+
+  float distanceToPlane(std::vector<Atom> &mol, std::vector<Atom> &plane);
 };
 //inline functions
 

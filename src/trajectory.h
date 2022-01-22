@@ -16,6 +16,33 @@ struct TrajChange{
 };
 */
 
+struct RingSearch{
+
+  RingSearch(int a, int b, short d){
+    atIndex = a; atIndexTarget = b; ringSize = d;
+  }
+  RingSearch(const RingSearch& rs){
+    atIndex = rs.atIndex;
+    atIndexTarget = rs.atIndexTarget;
+    prevAtIndex = rs.prevAtIndex;
+    ringSize = rs.ringSize;
+    level = rs.level;
+  }
+
+  int atIndex;
+  int atIndexTarget;
+  int prevAtIndex = -1; //garantees that the loop will not get stuck in the first level
+  short ringSize;
+  short level = 1; //always starts with 1
+};
+
+struct Freq{
+  float vib = 0;
+  std::vector<glm::vec3> disp;
+
+  bool operator==(const Freq& other) {return false;}
+  bool operator!=(const Freq& other) {return true;}
+};
 
 class Trajectory
 {
@@ -32,18 +59,19 @@ class Trajectory
     std::string spaceGroup;
     std::string name;
     std::string dir;
+    std::vector<Freq> freqs;
     
     //functions
     void addBond(const unsigned int i, const unsigned int j, const float &bdist, bool updateAtoms = false);
+    void addBond(const unsigned int i, const unsigned int j, const float &bdist, glm::vec3 &offset);
     void addBond(const unsigned int i, const unsigned int j, const float &bdist, const float &cylRadius, bool updateAtoms = false);
     void addBondedAtomsGeometrically(unsigned int index, short n, short atomicNumber, float blength);
     void addHydrogen(const unsigned int index, const float blength);
     void addFrame();
     unsigned int addFrame(Frame &fr);
 
-    void addMoleculeFromSelected(const std::string name);
-
     bool atBondDistance(const unsigned int i, const unsigned int j, float &bdist);
+    bool atBondDistancePBC(const unsigned int i, const unsigned int j, std::vector<glm::vec3>& trans);
 
     Atom& atom(unsigned int i){return frames_[cfi_].atom(i);}
     
@@ -54,6 +82,7 @@ class Trajectory
     Bond& bond(unsigned int i){return bonds_[i];}   //check the size
 
     void bringInsideCell();
+    void bringInsideCellAllFrames();
 
     glm::vec3 calcCentroid();
 
@@ -63,7 +92,7 @@ class Trajectory
 
     glm::vec3 centroid(){return centroid_;}
 
-    glm::mat3& cell(){return frames_[cfi_].cell;}
+    glm::mat3& cell(){return frames_[cfi_].cell_;}
     glm::vec3& cellLine(unsigned int i){return cellLines_[i];}
     glm::vec4& cellLineColor(unsigned int i){return cellLinesColors_[i];}
     int cellLineWidth(unsigned int i){return cellLinesWidths_[i];}
@@ -73,10 +102,10 @@ class Trajectory
     bool checkEqualCoors(glm::vec3 &a1, glm::vec3 &a2, float umb);
     bool checkEqualReplicated(glm::vec3 &a1, glm::vec3 &a2, float umb);
     // bool checkRingClosed(int level, int atIndex, int atIndexTarget, int excPrevIndex, std::vector<unsigned int>&inds);
-    bool checkRingClosed(int level, int atIndex, int atIndexTarget, std::vector<unsigned int>&checked, std::vector<unsigned int>&inds);
+    short checkRingClosed(const RingSearch rc, std::vector<unsigned int>&inds, std::vector<unsigned int> checked);
   
     Bond createBond(const unsigned int i, const unsigned int j, const float &bdist);
-    //return reference to frame object
+    //return reference to frame object 
     Frame& currentFrame(){return frames_[cfi_];} //CAUTION COULD HAVE SEGFAULT
     
     //return reference to frame object
@@ -85,30 +114,44 @@ class Trajectory
     //calculate distance between two atom
     float distance(const unsigned int i, const unsigned int j);
 
+    float energy();
+
+    void findMoleculesFromScratch();
     void findRing(short ringSize, unsigned int atIndex, std::vector<unsigned int>&inds);
-    void findMoleculeRecursively(unsigned int atIndex, std::vector<unsigned int>&inds);
+    void findMoleculeRecursively(unsigned int atIndex, std::vector<unsigned int>&inds, bool lock = false);
     
     void fractionalToCartesian();
     void fractToCartAllFrames();
 
     //return reference to frame object
     Frame& frame(const unsigned int i);
+    std::vector<Frame> frames(){return frames_;}
 
     //generate bonds for the current frame
     void generateBonds();
+    void generateBondsPBC();
     void generateNewBonds(std::vector<unsigned int> &inds);
 
     std::vector<Bond> getBondFromMolecule(Molecule &mol);
 
     int getAtomNeighborIndex(int i, Bond &bond);
-    std::vector<unsigned int> getAtomNeighborsIndices(unsigned int atIndex);
+    Atom& getAtomNeighbor(const Atom& at, Bond &bond);
+    std::vector<unsigned int> getBondedIndices(unsigned int atIndex);
+    std::vector<Atom> getBondedAtoms(unsigned int atIndex);
+    std::vector<Atom> getBondedAtoms(const Atom& at);
+    std::vector<Bond> getBonds(const Atom& at);
+    std::vector<Bond> getBonds(const unsigned int i);
 
     void hideSelectedCurrentFrame();
     void hideSelectedAllFrames();
+    std::string info();
     int isRepeated(glm::vec3 &coor, Frame &fr);
     int isRepeated(glm::vec3 &coor);
     void lockSelectedCurrentFrame();
     void lockSelectedAllFrames();
+    
+    std::vector<Molecule> molecules(){return molecules_;}
+
     //advanece one frame forward
     int nextFrame(int step = 1);
 
@@ -142,6 +185,8 @@ class Trajectory
 
     void toCentroid();
     void translateCoors(const glm::vec3 &transVec);
+
+    float totalCharge(){return frames_[cfi_].totalCharge();}
 
     void unlockObjectsCurrentFrame();
     void unlockObjectsAllFrames();

@@ -9,6 +9,7 @@ using std::cout;
 using std::endl;
 
 
+
 Trajectory::Trajectory()
 {
   this->initCellLines();
@@ -33,6 +34,21 @@ void Trajectory::addBond(const unsigned int i, const unsigned int j, const float
 }
 
 
+void Trajectory::addBond(const unsigned int i, const unsigned int j, const float &bdist, glm::vec3& offset){
+  Bond b;
+  if(atom(i).cylRadius() >= atom(j).cylRadius()){
+    b.cylRadius = atom(j).cylRadius();
+  }
+  else{
+    b.cylRadius = atom(i).cylRadius();
+  }
+  b.at1 = i;
+  b.at2 = j;
+  b.length = bdist;
+  b.offset = offset;
+  bonds_.push_back(b);
+}
+
 void Trajectory::addBond(const unsigned int i, const unsigned int j, 
                           const float &bdist, const float &cylRadius, bool updateAtoms){
   // I am not using it right now
@@ -54,7 +70,7 @@ void Trajectory::addBondedAtomsGeometrically(unsigned int index, short n, short 
   for(short i = 0; i < n; i++){
 	  glm::vec3 aveVector(0.0f, 0.0f, 0.0f);
 	  //iterate over all bonds to sum the vector of bonds to determine average
-	  for(auto &aindex:this->getAtomNeighborsIndices(index)){  // iterate over the atomic neighbors of atom index
+	  for(auto &aindex:this->getBondedIndices(index)){  // iterate over the atomic neighbors of atom index
       Atom &at2 = this->atom(aindex);
       //get position vectors with respect to atom with index index
       glm::vec3 relvec = at2.coor - at.coor; 
@@ -66,7 +82,8 @@ void Trajectory::addBondedAtomsGeometrically(unsigned int index, short n, short 
 	  if(aveVector[0] == 0.0 && aveVector[1] == 0.0 && aveVector[2] == 0.0){
       // add the atom displaced blength along the x axis
       glm::vec3 newcoor = at.coor + glm::vec3(blength, 0.0f, 0.0f);
-	    fr.addAtom(atomicNumber, newcoor);   
+	    Atom& at = fr.addAtom(atomicNumber, newcoor); 
+      strcpy(at.atomType, props::atomicSymbols[atomicNumber]);
 		  //add bond first atom
 		  this->addBond(index, this->numAtoms() - 1, blength); //add bond with the indices of each atom
 	  }
@@ -79,7 +96,8 @@ void Trajectory::addBondedAtomsGeometrically(unsigned int index, short n, short 
 	    aveVector += at.coor;
 
       //add atom and bond it to atom at
-      fr.addAtom(atomicNumber, aveVector);   
+      Atom& at = fr.addAtom(atomicNumber, aveVector);  
+      strcpy(at.atomType, props::atomicSymbols[atomicNumber]); 
 		  //add bond first atom
 		  this->addBond(index, this->numAtoms() - 1, blength); //add bond with the indices of each atom
 
@@ -95,7 +113,7 @@ void Trajectory::addHydrogen(const unsigned int index, const float blength){
   Frame& fr = currentFrame();
   //define atoms to add
   unsigned int atomsToAdd = 0;
-  int geometry = 0; //tetrahedro
+  //int geometry = 0; //tetrahedro will use it later
   if(at.atomicNum == 8 || at.atomicNum == 16){
     atomsToAdd = 2;
   }
@@ -103,17 +121,17 @@ void Trajectory::addHydrogen(const unsigned int index, const float blength){
     atomsToAdd = 4;
   }
 
-  std::vector<unsigned int> ni = this->getAtomNeighborsIndices(index);
+  std::vector<unsigned int> ni = this->getBondedIndices(index);
 
   for(unsigned int i = (unsigned int)ni.size(); i < atomsToAdd; i++){
-    ni = this->getAtomNeighborsIndices(index); // update the neighbors
+    ni = this->getBondedIndices(index); // update the neighbors
     printf("neighbors %i %i\n", (int)ni.size(), i);
     
     if(i == 0){  //first hydrogen atom to add
       glm::vec3 relvec = glm::normalize(glm::vec3{1.0f, 1.0f, 1.0f});
       glm::vec3 ncoor = at.coor + relvec * blength;
       Atom& at = fr.addAtom(1, ncoor); 
-      strncpy(at.atomType, "H", 1);
+      strncpy(at.atomType, "H", 2);
       //add bond with the indices of each atom and update the atoms bonds indices
       this->addBond(index, this->numAtoms() - 1, blength, true); 
     }
@@ -129,7 +147,7 @@ void Trajectory::addHydrogen(const unsigned int index, const float blength){
       relvec *= blength;
       relvec += at.coor;
       Atom& addedAt = fr.addAtom(1, relvec); 
-      strncpy(addedAt.atomType, "H", 1);
+      strncpy(addedAt.atomType, "H", 2);
       //add bond with the indices of each atom and update the atoms bonds indices
       this->addBond(index, this->numAtoms() - 1, blength, true); 
     }
@@ -151,7 +169,7 @@ void Trajectory::addHydrogen(const unsigned int index, const float blength){
       aveVec *= blength;
       aveVec += at.coor;
       Atom& addedAt = fr.addAtom(1, aveVec); 
-      strncpy(addedAt.atomType, "H", 1);
+      strncpy(addedAt.atomType, "H", 2);
       //add bond with the indices of each atom and update the atoms bonds indices
       this->addBond(index, this->numAtoms() - 1, blength, true); 
 
@@ -167,7 +185,7 @@ void Trajectory::addHydrogen(const unsigned int index, const float blength){
       aveVec *= -blength;
       aveVec += at.coor;
       Atom& addedAt = fr.addAtom(1, aveVec); 
-      strncpy(addedAt.atomType, "H", 1);
+      strncpy(addedAt.atomType, "H", 2);
       //add bond with the indices of each atom and update the atoms bonds indices
       this->addBond(index, this->numAtoms() - 1, blength, true); 
 
@@ -176,8 +194,6 @@ void Trajectory::addHydrogen(const unsigned int index, const float blength){
   
 
 }
-
-
 
 void Trajectory::addFrame(){
   Frame fr;
@@ -193,45 +209,6 @@ unsigned int Trajectory::addFrame(Frame &fr){
   //this->cfi_ = (int)frames_.size() - 1;
 }
 
-void Trajectory::addMoleculeFromSelected(const std::string name){
-  /**
-   * creates a new molecule with the selected indices
-   */
-
-  //search in the already created molecule groups. If found the reference will point
-  //to the already existing molecule group
-  bool found = false;
-  short molIndx;
-  for(unsigned short i=0; i<molecules_.size(); i++){
-    if(name.compare(molecules_[i].name)){
-      found = true;
-      molIndx = i;
-    }
-  }
-  if(found){
-    molecules_[molIndx].numMols += 1; //increase the number of molecules of type i
-    for(unsigned int i = 0; i < this->numAtoms(); i++){
-      if(atom(i).selected){
-        atom(i).molType = molIndx;
-        atom(i).molIndex = molecules_[molIndx].numMols;
-      }
-    }
-  }
-  else{
-    Molecule mol;
-    strcpy(mol.name, name.c_str());
-    mol.numMols += 1;
-    molecules_.push_back(mol);
-    for(unsigned int i = 0; i < this->numAtoms(); i++){
-      if(atom(i).selected){
-        atom(i).molType = (short)molecules_.size() - 1;
-        atom(i).molIndex = mol.numMols;
-      }
-    }
-  }
-  // the atomic properties already store the information on bonds
-  printf("created molecule %s \n", name.c_str());
-}
 
 bool Trajectory::atBondDistance(const unsigned int i, const unsigned int j, float &bdist){
   float sradio = atom(i).radius() + atom(j).radius();
@@ -251,6 +228,24 @@ bool Trajectory::atBondDistance(const unsigned int i, const unsigned int j, floa
   }
      
   return true;
+}
+
+
+bool Trajectory::atBondDistancePBC(const unsigned int i, const unsigned int j, vector<glm::vec3> &trans){
+  float sradio = atom(i).radius() + atom(j).radius();
+
+  //go periodic
+  for(auto &t:trans){
+    glm::vec3 ncoor = t + atom(j).coor;
+    float sum2 = glm::distance(atom(i).coor, ncoor);
+    if(sum2 <= sradio){
+      addBond(i, j, sum2, t);
+      // bdist = sum2;
+      return true;
+    }
+  } //end for periodic
+   
+  return false;
 }
 
 //return angle bewteen 3 atoms
@@ -279,6 +274,14 @@ float Trajectory::distance(const unsigned int i, const unsigned int j){
   return d;
 }
 
+void Trajectory::bringInsideCellAllFrames(){
+  int prevCfi = cfi_;  //store the current frame index
+  for(unsigned int i = 0; i < this->numFrames(); i++){
+    this->setCurrentFrameIndex(i);
+    this->bringInsideCell();
+  }
+  cfi_ = prevCfi; //restore the initial current frame
+}
 
 void Trajectory::bringInsideCell(){
   if(cfi_ == -1) { printf("Traj has no Frames\n"); return;} //if no frames return
@@ -381,51 +384,83 @@ bool Trajectory::checkEqualReplicated(glm::vec3 &a1, glm::vec3 &a2, float umb){
   return false;
 }
 
-  //recursively find bond
-// bool Trajectory::checkRingClosed(int level, int atIndex, int atIndexTarget, int excPrevIndex, vector<unsigned int>&inds){
-//   Atom &at = this->atom(atIndex);
-//   printf("CHECKING LEVEL: %i index: %i  %s\n", level, atIndex, at.symbol());
-//   if(level == 0){  //must check match
-//     for(auto &bi:at.bondInds){
-//       if(bi == -1) break;
-//       //get bond reference
-//       Bond &b = bonds_[bi];
-//       int neighbor = this->getAtomNeighborIndex(atIndex, b);
-//       if(neighbor == -1) continue;   //if by mistake indices are wrong, check. No neighbor do nothings
-//       //check if any of the atom indices of the bond matches the target
-//       if(neighbor == (int)atIndexTarget){
-//         printf("found level:%i  , %i  %i\n", level, neighbor, atIndexTarget);
-//         return true; //return true
-//       }
-//     }
-//   }
-//   else{  //level is not zero, should not match
-//     //decrease one level and search recursively
-//     level -= 1;
-//     for(auto &bi:at.bondInds){
-//       if(bi == -1) break;
-//       //get bond reference
-//       Bond &b = bonds_[bi];
-//       //get the neighbor
-//       int neighbor = this->getAtomNeighborIndex(atIndex, b);
-//       if(neighbor == -1) continue;   //if by mistake indices are wrong, check. No neighbor do nothings
-//       if(neighbor == excPrevIndex) continue; // exclude previus index, avoid going back to target
-//       bool foundCloseRing = checkRingClosed(level, neighbor, atIndexTarget, atIndex, inds);
-//       //add neighbor index and return true if found match with target
-//       if(foundCloseRing){
-//         inds.push_back(neighbor);
-//         return true;
-//       }
-//     } // end for bond indices
-//   }
-//   //return false, not found any match
-//   return false;
-// } // end recursive function
+short Trajectory::checkRingClosed(RingSearch rs, vector<unsigned int>&inds, vector<unsigned int> checked){
+  printf("searching in level %i , atom Index %i\n", rs.level, rs.atIndex);
+  checked.push_back(rs.atIndex);
+  //Caution !! this is a recursive function
+  Atom &at = this->atom(rs.atIndex);
+  if(at.locked) return 2;
+  //checked.push_back(atIndex); //added to checked, before entering sublevels, otherwise the algorithm returns to the first point
 
-bool Trajectory::checkRingClosed(int level, int atIndex, int atIndexTarget, vector<unsigned int>&checked, vector<unsigned int>&inds){
-  Atom &at = this->atom(atIndex);
-  if(at.locked) return false;
-  checked.push_back(atIndex); //added to checked, before entering sublevels, otherwise the algorithm returns to the first point
+  //temp neighbors and code, to decide later which will be return based on the codes
+  std::vector<std::vector<unsigned int>> ringCandidates;
+  std::vector<short> codes;
+
+  //start search bonds
+  for(auto &bi:at.bondInds){
+    if(bi == -1) break;
+    //get bond reference
+    Bond &b = bonds_[bi];
+    int neighbor = this->getAtomNeighborIndex(rs.atIndex, b);
+    if(neighbor == -1) continue;   //if by mistake indices are wrong, check. No neighbor do nothings
+
+    //not going back the same path to target index. This will exclude the target in the first level
+    //printf("neigh %i    previndex %i\n", neighbor, rs.prevAtIndex);
+    if(neighbor == rs.prevAtIndex) continue; 
+    
+    if(rs.level == rs.ringSize){ // matched level, correct ring size, no more recursive calls
+      if(neighbor == rs.atIndexTarget){ //will always be true for level 1, but excluded in the previous conditional
+        inds.push_back(neighbor);
+        return 0; // useless to continue the loop, Found my guy.
+      }
+       continue; //do not call recursive but continue with other neighbors
+    }
+
+    if(neighbor == rs.atIndexTarget){ //found smaller ring
+      std::vector<unsigned int> tempCandidates;
+      codes.push_back(1);
+      tempCandidates.push_back(neighbor);
+      ringCandidates.push_back(tempCandidates);
+      continue;
+    }
+
+    //cannot be before because conflicts with checking the target index
+    if(std::find(checked.begin(), checked.end(), neighbor) != checked.end()) continue; 
+    
+    //default call recursive
+    std::vector<unsigned int> tempCandidates;
+    RingSearch rs2(rs);
+    rs2.level = rs.level + 1;
+    rs2.atIndex = neighbor;
+    rs2.prevAtIndex = rs.atIndex;
+
+    short ringSizeCode = checkRingClosed(rs2,  tempCandidates, checked);
+    //add candidates if match right of smaller ring size
+    if(ringSizeCode == 0 || ringSizeCode == 1){  //right or smaller rings // I should remove small rings
+      codes.push_back(ringSizeCode);
+      tempCandidates.push_back(neighbor);
+      ringCandidates.push_back(tempCandidates);
+    }
+  } // end for loop
+
+  //check for smaller ring sizes. It there is one smaller ring the function return 2
+  short returnCode = 2;
+  for(unsigned int i=0; i<codes.size(); i++){
+    // if(codes[i] == 1){ //there is one smaller ring, return false
+    //   printf("smaller ring found in level %i\n", rs.level+1);
+    //   return 1;
+    // }
+    if(codes[i] == 0){ //right ring found, store the vector index to add to final inds reference
+      for(auto &ind:ringCandidates[i]){
+        inds.push_back(ind);
+      }
+
+      returnCode = 0; //there is at least one right size ring
+    }
+  }
+
+  return returnCode;
+/*
   printf("CHECKING LEVEL: %i index: %i  %s\n", level, atIndex, at.symbol());
   if(level == 1){  //must check match
     for(auto &bi:at.bondInds){
@@ -466,21 +501,62 @@ bool Trajectory::checkRingClosed(int level, int atIndex, int atIndexTarget, vect
   }
   //return false, not found any match
   return false;
+  */
 } // end recursive function
 
 
+float Trajectory::energy(){
+  if(cfi_ == -1) return 0;
+  return frames_[cfi_].energy;
+}
+
 void Trajectory::findRing(short ringSize, unsigned int atIndex, vector<unsigned int>&inds){
-  std::vector<unsigned int> checked;
-  if(this->checkRingClosed(ringSize, atIndex, atIndex, checked, inds)){
-    inds.push_back(atIndex);
-  }
+  RingSearch rs(atIndex, atIndex, ringSize);
+  vector<unsigned int> checked;
+  this->checkRingClosed(rs, inds, checked);
   printf("ring vector size %i\n", (int)inds.size());
   return;
 }
 
-void Trajectory::findMoleculeRecursively(unsigned int atIndex, vector<unsigned int>&inds){
+void Trajectory::findMoleculesFromScratch(){
+  molecules_.clear(); //from scratch
+  //first store all the previously unlocked atoms and unlock the locked ones
+  //all atoms must be unlocked before searching for the molecules
+  vector<unsigned int > unlockedInds;
+  unlockedInds.reserve(numAtoms());
+  for(unsigned int i = 0; i < numAtoms(); i++){
+    if(!this->atom(i).locked) unlockedInds.push_back(i);
+    else this->atom(i).locked = false;
+  }
+  //first store all the previously locked atoms
+  int counterName = 0;
+  for(unsigned int i=0; i < numAtoms(); i++){
+    if(atom(i).locked) continue;
+    //pass the index i to start looking for the molecule 
+    //and lock all the atoms found. Those will be skipped in next iterations 
+    //and will not increase the number of molecules
+    Molecule mol;
+    findMoleculeRecursively(i, mol.inds, true);
+    //printf("molecule n has %i atoms\n", mol.inds.size());
+    string name = "m_";
+    name += std::to_string(counterName);
+    strncpy(mol.name, name.c_str(), 10);
+    molecules_.push_back(mol); 
+    counterName += 1;
+  }
+
+  //restore the previously unlocked atoms
+  for(auto i:unlockedInds){
+    this->atom(i).locked = false;
+  }
+
+}
+
+void Trajectory::findMoleculeRecursively(unsigned int atIndex, vector<unsigned int>&inds, bool lock){
   inds.push_back(atIndex);
   Atom &at = this->atom(atIndex);
+  if(lock) {at.locked = true;}
+
   for(auto &bi:at.bondInds){
     if(bi == -1) break;
     //get bond reference
@@ -491,8 +567,8 @@ void Trajectory::findMoleculeRecursively(unsigned int atIndex, vector<unsigned i
     //check if neighbor has already been added to vector inds
     auto it = std::find(inds.begin(), inds.end(), neighbor);
     if(it == inds.end()){ //only add if it is not found in vector inds
-      inds.push_back(neighbor);
-      this->findMoleculeRecursively(neighbor, inds);
+      // inds.push_back(neighbor);
+      this->findMoleculeRecursively(neighbor, inds, lock);
     }
   } // end for bond indices
 }
@@ -616,6 +692,98 @@ void Trajectory::generateNewBonds(std::vector<unsigned int> &inds){
 }
 
 
+void Trajectory::generateBondsPBC(){
+  //create PBC translations
+  std::vector<glm::vec3> trans;
+  Cell cell(frames_[cfi_].cell_);
+  float a = cell.a();
+  float b = cell.b();
+  float c = cell.c();
+  
+  trans.push_back(glm::vec3(a, 0, 0));
+  trans.push_back(glm::vec3(0, b, 0));
+  trans.push_back(glm::vec3(0, 0, c));
+  trans.push_back(glm::vec3(a, b, 0));
+  trans.push_back(glm::vec3(a, 0, c));
+  trans.push_back(glm::vec3(0, b, c));
+  trans.push_back(glm::vec3(a, b, c));
+
+  trans.push_back(glm::vec3(-a, 0, 0));
+  trans.push_back(glm::vec3(0, -b, 0));
+  trans.push_back(glm::vec3(0, 0, -c));
+  trans.push_back(glm::vec3(-a, -b, 0));
+  trans.push_back(glm::vec3(-a, 0, -c));
+  trans.push_back(glm::vec3(0, -b, -c));
+  trans.push_back(glm::vec3(-a, -b, -c));
+ 
+  trans.push_back(glm::vec3(a, -b, 0));
+  trans.push_back(glm::vec3(-a, b, 0));
+
+  trans.push_back(glm::vec3(a, 0, -c));
+  trans.push_back(glm::vec3(-a, 0, c));
+
+  trans.push_back(glm::vec3(0, b, -c));
+  trans.push_back(glm::vec3(0, -b, c));
+
+  trans.push_back(glm::vec3(-a, b, c));
+  trans.push_back(glm::vec3(a, -b, c));
+  trans.push_back(glm::vec3(a, b, -c));
+
+  trans.push_back(glm::vec3(-a, -b, c));
+  trans.push_back(glm::vec3(-a, b, -c));
+  trans.push_back(glm::vec3(a, -b, -c));
+
+  /*
+  generates bond from scratch, using the information of the atomic properties, that is,
+  cylinder radius and bond radius
+  */
+  // float totclear = 0, totadd = 0, totabd = 0;
+  vector<Bond> tempbonds = bonds_;
+  this->bonds_.clear();
+  
+  //auto start0 = std::chrono::high_resolution_clock::now();
+
+  //clear all atom bonds
+  for(unsigned int i = 0; i < this->numAtoms(); i++){
+    this->atom(i).clearBonds();
+  }
+  //clear all atom bonds
+
+  //take care of locked atoms first
+  for(auto &bd:tempbonds){
+    Atom& at1 = atom(bd.at1);
+    Atom& at2 = atom(bd.at2);
+    if(at1.locked && at2.locked){
+      bonds_.push_back(bd);
+    }
+  }
+
+  for(unsigned int i = 0; i < numAtoms(); i++){
+    //printf("loop first level\n");
+    // this->atom(i).clearBonds();  //clear the bonds of atom i
+    for(unsigned int j = 0; j < i; j++){
+      if(this->atom(i).locked && this->atom(j).locked){
+        continue;
+      }
+      float length;
+      bool abd = atBondDistance(i, j, length);
+      if(abd){
+        addBond(i, j, length);
+      }
+      else{
+        abd = atBondDistancePBC(i, j, trans);
+        // if(abd){
+        //   addBond(i, j, length);
+        // }
+      }
+    }
+  }
+  this->updateAtomsBondsIndices();
+  //auto  stop0 = std::chrono::high_resolution_clock::now();
+  //auto duration0 = std::chrono::duration_cast<std::chrono::microseconds> (stop0-start0);
+	//std::cout<<"total bonds duration:"<<duration0.count()*0.001<<"milisec "<<std::endl;
+}
+
 int Trajectory::getAtomNeighborIndex(int i, Bond &bond){
   if(bond.at1 == i){
     return bond.at2;
@@ -628,7 +796,17 @@ int Trajectory::getAtomNeighborIndex(int i, Bond &bond){
   }
 }
 
-std::vector<unsigned int> Trajectory::getAtomNeighborsIndices(unsigned int atIndex){
+Atom& Trajectory::getAtomNeighbor(const Atom& at, Bond &bond){
+  Atom& at1 = this->atom(bond.at1);
+  if(at == at1){
+    return this->atom(bond.at2);
+  }
+  else {
+    return at1;
+  }
+}
+
+std::vector<unsigned int> Trajectory::getBondedIndices(unsigned int atIndex){
   std::vector<unsigned int> inds;
   if(atIndex > this->numAtoms()){
     printf("TRYING TO ACCESS ATOM INDEX GREATER THAN NUMMBER OF PROPERTIES\n");
@@ -644,6 +822,57 @@ std::vector<unsigned int> Trajectory::getAtomNeighborsIndices(unsigned int atInd
     inds.push_back((unsigned int)neighbor);
   }
   return inds;
+}
+
+std::vector<Atom> Trajectory::getBondedAtoms(unsigned int atIndex){
+  std::vector<Atom> ats;
+  if(atIndex > this->numAtoms()){
+    printf("TRYING TO ACCESS ATOM INDEX GREATER THAN NUMMBER OF PROPERTIES\n");
+    return ats;
+  }
+
+  Atom& at = this->atom(atIndex); //get reference to property atIndex
+  for(auto &bi:at.bondInds){
+    if(bi == -1) break;
+    Bond &b = bonds_[bi];
+    int neighbor = this->getAtomNeighborIndex(atIndex, b);
+    if(neighbor == -1) continue;   //if by mistake indices are wrong, check. No neighbor do nothings
+    
+    ats.push_back(this->atom(neighbor));
+  }
+  return ats;
+}
+
+std::vector<Atom> Trajectory::getBondedAtoms(const Atom& at){
+  std::vector<Atom> ats;
+
+  for(auto &bi:at.bondInds){
+    if(bi == -1) break;
+    Bond &b = bonds_[bi];
+    Atom& at2 = this->getAtomNeighbor(at, b);    
+    ats.push_back(at2);
+  }
+  return ats;
+}
+
+std::vector<Bond> Trajectory::getBonds(const unsigned int i){
+  std::vector<Bond> atombonds;
+  for(auto &bi:atom(i).bondInds){
+    if(bi == -1) break;
+    atombonds.push_back(bonds_[bi]);
+  }
+
+  return atombonds;
+}
+
+std::vector<Bond> Trajectory::getBonds(const Atom& at){
+  std::vector<Bond> atombonds;
+  for(auto &bi:at.bondInds){
+    if(bi == -1) break;
+    atombonds.push_back(bonds_[bi]);
+  }
+
+  return atombonds;
 }
 
 std::vector<Bond> Trajectory::getBondFromMolecule(Molecule &mol){
@@ -686,6 +915,16 @@ void Trajectory::hideSelectedAllFrames(){
       }
     }  
   }
+}
+
+std::string Trajectory::info(){
+  string inf;
+  inf += "Frames: " + std::to_string(numFrames()) + "\n";
+  inf += "Atoms : " + std::to_string(numAtoms()) + "\n";
+  inf += "Bonds :   " + std::to_string(numBonds()) + "\n";
+  findMoleculesFromScratch();
+  inf += "Molecules :   " + std::to_string(molecules_.size()) + "\n";
+  return inf;
 }
 
 void Trajectory::initCellLines(){
@@ -866,7 +1105,7 @@ bool Trajectory::setCurrentFrameIndex(const int index){
 
 void Trajectory::setCartFracMatrix(glm::mat3 &matrix){
   if(cfi_ == -1) return;
-  glm::mat3 &cell = this->frames_[cfi_].cell; 
+  glm::mat3 &cell = this->frames_[cfi_].cell_; 
 
   matrix = math::cartToFracMatrix(cell);
 }
@@ -889,7 +1128,7 @@ bool Trajectory::setDistance(unsigned int i, unsigned int j, float d){
 
 void Trajectory::setFracCartMatrix(glm::mat3  &matrix){
   if(cfi_ == -1) return;
-  glm::mat3 &cell = this->frames_[cfi_].cell; 
+  glm::mat3 &cell = this->frames_[cfi_].cell_; 
 
   matrix = math::fracToCartMatrix(cell);
 }
@@ -939,9 +1178,9 @@ void Trajectory::setUnitCell(float cellVecComps[9]){
     //cellVectComps stands for unit cell vector components
     if(cfi_ == -1) return;
     for(int i=0; i<3; i++){
-        for(int j = 0; j <3; j++){
-          this->frames_[cfi_].cell[i][j] = cellVecComps[3*i + j] * this->volScale;
-        }
+      for(int j = 0; j <3; j++){
+        this->frames_[cfi_].cell_[i][j] = cellVecComps[3*i + j] * this->volScale;
+      }
     }
     
     this->setUnitCellLines();
@@ -951,15 +1190,15 @@ void Trajectory::setUnitCell(float cellVecComps[9]){
 void Trajectory::setUnitCell(float xx, float xy, float xz, float yx, float yy, float yz, float zx, float zy, float zz ){
   if(cfi_ == -1) return;
 
-  this->frames_[cfi_].cell[0][0] = xx * this->volScale;
-  this->frames_[cfi_].cell[0][1] = xy * this->volScale;
-  this->frames_[cfi_].cell[0][2] = xz * this->volScale;
-  this->frames_[cfi_].cell[1][0] = yx * this->volScale;
-  this->frames_[cfi_].cell[1][1] = yy * this->volScale;
-  this->frames_[cfi_].cell[1][2] = yz * this->volScale;
-  this->frames_[cfi_].cell[2][0] = zx * this->volScale;
-  this->frames_[cfi_].cell[2][1] = zy * this->volScale;
-  this->frames_[cfi_].cell[2][2] = zz * this->volScale;
+  this->frames_[cfi_].cell_[0][0] = xx * this->volScale;
+  this->frames_[cfi_].cell_[0][1] = xy * this->volScale;
+  this->frames_[cfi_].cell_[0][2] = xz * this->volScale;
+  this->frames_[cfi_].cell_[1][0] = yx * this->volScale;
+  this->frames_[cfi_].cell_[1][1] = yy * this->volScale;
+  this->frames_[cfi_].cell_[1][2] = yz * this->volScale;
+  this->frames_[cfi_].cell_[2][0] = zx * this->volScale;
+  this->frames_[cfi_].cell_[2][1] = zy * this->volScale;
+  this->frames_[cfi_].cell_[2][2] = zz * this->volScale;
   
   this->setUnitCellLines();
   return;
@@ -968,7 +1207,11 @@ void Trajectory::setUnitCell(float xx, float xy, float xz, float yx, float yy, f
 
 void Trajectory::setUnitCellLines(){
   if (cfi_ == -1) return;
-  glm::mat3 &cell = this->frames_[cfi_].cell; 
+  if(!this->frames_[cfi_].cellIsSet){ 
+    this->cellIsSet_ = false;
+    return;
+  }
+  glm::mat3 &cell = this->frames_[cfi_].cell_; 
 //    // de cero a a
   cellLines_[0] = {0.0,0.0,0.0};
   cellLines_[1] = {cell[0][0], cell[0][1], cell[0][2]};
@@ -1040,7 +1283,7 @@ void Trajectory::setUnitCellVectorsComponents(props::LatticeParams &lp){
   
   cell[2][2] = sqrt(lp.c * lp.c - cell[2][0]*cell[2][0] - cell[2][1]*cell[2][1]);
 
-  this->frames_[cfi_].cell = cell;
+  this->frames_[cfi_].setUnitCell(cell);
 
   setUnitCellLines();
   this->cellIsSet_ = true;
@@ -1068,6 +1311,7 @@ void Trajectory::unlockObjectsCurrentFrame(){
     this->atom(i).locked = false;
   }
 }
+
 void Trajectory::unlockObjectsAllFrames(){
   for(auto &fr:frames_){
     for(unsigned int i = 0; i < fr.numAtoms(); i++){

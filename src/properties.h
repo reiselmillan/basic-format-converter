@@ -31,6 +31,7 @@ namespace props{
       a = ai; b = bi; c = ci; alpha = alphai; beta = betai; gamma = gammai;
     }
     LatticeParams(){}
+    
     float a = 0;
     float b = 0;
     float c = 0;
@@ -44,7 +45,7 @@ namespace props{
   void setSpaceGroups();
   // symmetry related ------------------------
   
-  const short NUMELEM = 100;
+  const short NUMELEM = 101;
   extern bool init;
   //extern std::map<std::string, float> radios;
   extern float cylinders[NUMELEM];
@@ -66,14 +67,37 @@ class Style
 {
   public:
     Style(char* name);
-    Style(char *fileName, std::string name);
+    Style(std::string filePath);
     std::string name;
-    float cylinders[props::NUMELEM];
-    float masas[props::NUMELEM];
+    float cylinders[props::NUMELEM] = { 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, //first and second rows
+                                      0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 
+                                      0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 
+                                      0.2, 0.2, 0.2, 0.2 };
+
+    float masas[props::NUMELEM] = { 0.0, 1.007970, 0.0, 6.941, 0.0, 0.0, 12.0, 0.0, 15.99940, 
+                                    0.0, 0.0, 0.0, 0.0, 26.98153, 28.08600, 30.97376, 0.0, 0.0, 
+                                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+                                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+                                    0.0};
+
     std::array<glm::vec4, props::NUMELEM> colors;
-    float radios[props::NUMELEM];
-    float spheres[props::NUMELEM];
+
+    float radios[props::NUMELEM] = {0.5, 0.5, 0.5, 1.0, 1.0, 0.9, 0.9, 0.8, 1.0, 0.7, 0.7,
+                                    1.1, 1.1, 1.1, 1.0, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9,
+                                    0.9,0.9,0.9,0.9,1.5,1.5,1.5,1.5,1.5,1.5,1.5};
+
+    float spheres[props::NUMELEM] = { 0.3, 0.25, 0.25, 0.4, 0.3, 0.3, 0.4, 0.4, 0.4, 0.4, 0.4, //first and second rows
+                                      0.6, 0.6, 0.6, 0.3, 0.6, 0.6, 0.5, 0.5, 0.6, 0.6, 0.6, 
+                                      0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 
+                                      0.6, 0.6, 0.6, 0.6 };
     bool drawWithLine[props::NUMELEM];
+
+    bool defaultStyle = false;
+
+    //funcs ------------------------
+    void setProperties(short atNum, float sphere, float radius, float cyl, glm::vec4 &color);
+    bool operator==(const Style& other);
+    bool operator!=(const Style& other);
 
 };
 

@@ -260,6 +260,16 @@ float math::calcAngle(const glm::vec3 &p1, const glm::vec3 &p2, const glm::vec3 
 
 }
 
+
+float math::calcAngle(const Atom &a1, const Atom &a2, const Atom &a3){
+  glm::vec3 v1 = a1.coor - a2.coor;
+  glm::vec3 v2 = a3.coor - a2.coor;
+
+  float angle = acos(glm::dot( glm::normalize(v1), glm::normalize(v2)));
+  return angle*180/3.14159265359;
+
+}
+
 float math::calcAngleRadians(const std::array<float, 3> &p1, const std::array<float, 3> &p2, const std::array<float, 3> &p3){
     float v1[3],v2[3];
     float n1,n2, angle;
@@ -398,4 +408,44 @@ bool math::setDistance(Atom &at1, Atom &at2, float d){
   vec = glm::normalize(vec);
   at1.coor = at2.coor + vec * d;
   return true;
+}
+
+float math::distanceToPlane(std::vector<Atom> &mol, std::vector<Atom> &plane){
+  //find centroid of mol
+  glm::vec3 molcm{0.0f, 0.0f, 0.0f};
+  for(auto &at:mol){
+    molcm += at.coor;
+  }
+  molcm /= (int)mol.size();
+
+  //find centroid of plane
+  glm::vec3 planecm{0.0f, 0.0f, 0.0f};
+  for(auto &at:plane){
+    planecm += at.coor;
+  }
+  planecm /= (int)plane.size();
+
+  //calculate the coordinates of the centroid of the molecule with respect to the 
+  //centroid of the plane
+  molcm -= planecm;
+
+  //find weighted averages of the atomic positions of the plane atoms R1 and R2
+  glm::vec3 R1{0.0f, 0.0f, 0.0f}, R2{0.0f, 0.0f, 0.0f};
+  int i = 1;
+  for(auto &at:plane){
+    glm::vec3 rl0 = at.coor - planecm;
+    R1 += rl0 * sin(2 * math::PI * i);
+    R2 += rl0 * cos(2 * math::PI * i);
+    i += 1;
+  }
+  //normalized
+  R1 /= (int)plane.size();
+  R2 /= (int)plane.size();
+  glm::vec3 planeVec = glm::cross(R1, R2);
+  planeVec = glm::normalize(planeVec);
+
+  //finally compute the distance
+  float d = glm::dot(planeVec, molcm);
+  return d;
+
 }

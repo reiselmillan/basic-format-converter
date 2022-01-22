@@ -1,7 +1,6 @@
 // Include GLM
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-// #include <globals.h>
 #include "properties.h"
 
 class BaseAtom
@@ -9,7 +8,7 @@ class BaseAtom
   public:
     BaseAtom(){};
 
-    glm::vec3 coor;
+    glm::vec3 coor = glm::vec3(0.0f, 0.0f, 0.0f);
     short atomicNum = 0;
 
     //functions
@@ -20,7 +19,9 @@ class BaseAtom
     void setSphere(const float s);
     void setRadius(const float r);
 
-    void setStyle(int id);
+    void setStyle(unsigned int id);
+    void setStyle(std::string style); 
+    Style& style(){return styles[styleIndex];}
 
     float radius();
     float cylRadius();
@@ -39,10 +40,11 @@ class Atom: public BaseAtom
     Atom(){};
 
     char atomType[10] = "         ";
-    const char* getAtomType(){return atomType;}  //only the python wrapper
+    const char* getAtomType(){ return atomType; }  //only the python wrapper
     void setAtomType(const char* at){strcpy(atomType, at);} //only for the python wrapper
 
-    char* residue =  (char*)" ";
+    char residue[10] =  "RES      ";
+    void setResidue(const char* res){strcpy(residue, res);} //only for the python wrapper
     float charge = 0;
     float chemShift = 0.0;
     bool asymUnit = true;
@@ -64,23 +66,23 @@ class Atom: public BaseAtom
     void clearBonds();
     void addBond(short i);
 
-    //funcs
-    // void setPropertiesPointer(Properties* prop);
-
-    // const char* atomType();
-    // void setAtomType(char * at);
-
-    // float sphere();
-    // void setSphere(float s);
+    bool operator==(const Atom &at)const{
+      if(coor.x == at.coor.x && coor.y == at.coor.y && coor.z == at.coor.z && atomicNum == at.atomicNum){
+          return true;
+      }else{
+          return false;
+      }
+    }
 
   private:
 
 
 };
 
-class AtomReplica : public BaseAtom
+class PeriodicAtom : public BaseAtom
 {
   public:
+    PeriodicAtom():BaseAtom(){};
     int oIndex = -1;
 
 };

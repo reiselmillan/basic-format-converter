@@ -70,10 +70,20 @@ void Atom::addBond(short index){
   }
 }
 
-void BaseAtom::setStyle(int index){
+void BaseAtom::setStyle(unsigned int index){
   if(index >= styles.size()){
     return;
   }
   this->styleIndex = index;
+}
+
+
+void BaseAtom::setStyle(std::string style){
+  for(unsigned int i = 0; i<styles.size(); i++){
+    if(styles[i].name.compare(style) == 0){
+      this->styleIndex = i;
+      return;
+    }
+  }
 }
 

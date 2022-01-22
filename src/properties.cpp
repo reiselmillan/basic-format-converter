@@ -1,13 +1,15 @@
 #include "properties.h"
-#include "space_gourps.h"
+#include "space_groups.h"
 #include <sstream>
 #include <iostream>
 #include <fstream>
+//#include <filesystem>
 #include "math/math.h"
 
 using props::NUMELEM;
 using std::string;
 using std::getline;
+//namespace fs = std::filesystem;
 
 // var vars vars
 
@@ -34,17 +36,63 @@ float props::masas[NUMELEM] = {
 };
 
 char props::atomicSymbols[NUMELEM][3] = {
-    "*", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V",
+    "X", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V",
     "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru",
-    "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg",
-    "Tl", "Pb", "Bi", "Po", "At", "Rn","Fr", "Ra"
+    "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr","Nd","Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho",
+    "Er","Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn","Fr", "Ra", "Ac", "Th",
+    "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm" 
 };
 
 std::vector<Style> styles;
 
 // FUNCS FUNCS FUNCS
 bool readSettings(){
-  return false;
+  //local config variables
+  string homeDir(getenv("HOME"));
+  string localConfigDir = homeDir + "/.tigre/";
+ 
+  //check the existence of style files
+  string cmd = "ls "+localConfigDir+"*.style > .styles";
+  int out = system(cmd.c_str());
+  if(out != 0){
+    return false;
+  }
+  //get files
+  std::fstream f(".styles");
+  std::string line;
+
+  // file = fopen(spaceGroupFile.c_str(), "r");
+  while (std::getline(f, line)) {
+    Style st(line);
+    styles.push_back(st);
+    //printf("found style: %s \n", line.c_str());
+  }
+  //int out = system("rm .styles");
+  std::remove(".styles");
+  /*
+  if(!fs::exists(localConfigDir)){
+    return false; //return if there is not local file /home/user/.tigre
+  }
+  
+
+  std::string ext(".style");
+  for (auto &p : fs::directory_iterator(localConfigDir))
+  {
+    if (p.path().extension() == ext){
+      char* filepath = const_cast<char*>(p.path().c_str());
+      string fileName =  p.path().stem().string();
+      Style st(filepath, fileName);
+      styles.push_back(st);
+      printf("found style: %s \n", p.path().stem().c_str());
+    }
+  }
+  */
+  if(styles.size() == 0){
+    return false;
+  }
+
+  return true;
+
 }
 
 
@@ -54,7 +102,7 @@ short props::atomicNumber(const char* symbol){
         return i;
       }
     }
-    return -1;
+    return 0;
   }
   
 void props::initProps(){
@@ -195,18 +243,36 @@ void props::setSpaceGroups(){
 }
 
 
-Style::Style(char* fileName, std::string name){
-  this->name = name;
+Style::Style(std::string filePath){
+  //set the name of the style stripping of the extension (.style)
+  string fileName = filePath.substr(filePath.find_last_of("/") + 1);
+  this->name = fileName.substr(0, fileName.find_last_of("."));
+
   FILE *file;
   char buffer[1024], symbol[3];
   float radius, sphere, cyl, color1, color2, color3, color4;
 
-  file = fopen(fileName, "r");
+  file = fopen(filePath.c_str(), "r");
   if (file == NULL){
     printf("local setting elements file not found\n");
+    // initialize colors
+    for(short i = 0; i < NUMELEM; i++){
+      colors[i][0] = props::colors[i][0];
+      colors[i][1] = props::colors[i][1];
+      colors[i][2] = props::colors[i][2];
+      colors[i][3] = props::colors[i][3];
+    }
+    // initialize colors
+    return;
   }
 
+  //reading style file ////////////////////////////////////////
   while(fgets(buffer, 1024, file) != NULL){
+    if(strncmp(buffer, "#default", 8) == 0){
+      this->defaultStyle = true;
+      continue;
+    }
+
     if(strncmp(buffer, "#", 1) == 0) continue;
 
     int n = sscanf(buffer, "%s %f %f %f %f %f %f %f", symbol, &sphere, &radius,
@@ -231,12 +297,36 @@ Style::Style(char* fileName, std::string name){
 Style::Style(char* name){
   this->name = name;
   for(short i = 0; i < NUMELEM; i++){
-    spheres[i] = props::spheres[i];
-    radios[i] = props::radios[i];
-    cylinders[i] = props::cylinders[i];
+    // spheres[i] = props::spheres[i];
+    // radios[i] = props::radios[i];
+    // cylinders[i] = props::cylinders[i];
     colors[i][0] = props::colors[i][0];
     colors[i][1] = props::colors[i][1];
     colors[i][2] = props::colors[i][2];
     colors[i][3] = props::colors[i][3];
   }
+}
+
+
+void Style::setProperties(short atNum, float sphere, float radius, float cyl, glm::vec4 &color){
+  if(atNum == -1)return;
+  
+  spheres[atNum] = sphere;
+  radios[atNum] = radius;
+  cylinders[atNum] = cyl;
+  colors[atNum] = color;
+}
+
+bool Style::operator==(const Style& other){
+  if(this->name.compare(other.name) == 0){
+    return true;
+  }
+  return false;
+}
+
+bool Style::operator!=(const Style& other){
+  if(this->name.compare(other.name) != 0){
+    return true;
+  }
+  return false;
 }
